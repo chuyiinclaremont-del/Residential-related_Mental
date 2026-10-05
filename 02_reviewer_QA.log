@@ -1,0 +1,2739 @@
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/02_reviewer_QA.log
+  log type:  text
+ opened on:  25 Aug 2026, 21:23:12
+
+. 
+. di "Phase I completed successfully. Starting reviewer-driven QA."
+Phase I completed successfully. Starting reviewer-driven QA.
+
+. di "Analysis file: $analysis_file"
+Analysis file: /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/1.processed_data/rwjf_2023_2025_analysis_ready_FREEZE_2026_08_2
+> 5.dta
+
+. 
+. ********************************************************************************
+. * II-1. LOAD AND VERIFY THE FREEZE-CANDIDATE ANALYSIS FILE
+. ********************************************************************************
+. 
+. use "$analysis_file", clear
+
+. 
+. local required_vars ///
+>     state county year statecode countycode fipscode region ///
+>     mental_health suicide_rate ///
+>     severe_housing_pp pct_high_housing_cost_pp ///
+>     severe_housing_cost_burden_pp pct_overcrowding_pp ///
+>     pct_lack_necessities_pp long_commute_pp homeownership_pp ///
+>     pct_over65_pp pct_under18_pp pct_female_pp ///
+>     pct_black_pp pct_white_pp pct_hispanic_pp ///
+>     median_income unemployment_pp child_poverty_pp pct_rural_pp ///
+>     hs_completion_pp some_college_pp uninsured_pp mh_providers_1000 ///
+>     food_insecurity_pp insufficient_sleep_pp loneliness_pp ///
+>     lack_social_support_pp
+
+. 
+. foreach v of local required_vars {
+  2.     capture confirm variable `v'
+  3.     if _rc {
+  4.         di as error "Required variable `v' is absent from the analysis-ready file."
+  5.         error 111
+  6.     }
+  7. }
+
+. 
+. * Confirm county-only records and one record per county/release year.
+. assert countycode > 0 & !missing(countycode)
+
+. assert !inlist(statecode, 60, 66, 69, 72, 78) & !missing(statecode)
+
+. isid fipscode year
+
+. 
+. ********************************************************************************
+. * II-2. ANALYTIC VARIABLE BLOCKS AND QA SAMPLE FLAGS
+. ********************************************************************************
+. 
+. global housing_pp ///
+>     severe_housing_cost_burden_pp pct_overcrowding_pp ///
+>     pct_lack_necessities_pp long_commute_pp homeownership_pp
+
+. 
+. global housing_all_pp ///
+>     severe_housing_pp pct_high_housing_cost_pp ///
+>     severe_housing_cost_burden_pp pct_overcrowding_pp ///
+>     pct_lack_necessities_pp long_commute_pp homeownership_pp
+
+. 
+. global demographic_covars_pp ///
+>     pct_over65_pp pct_under18_pp pct_female_pp ///
+>     pct_black_pp pct_white_pp pct_hispanic_pp
+
+. 
+. global socioeconomic_core_pp ///
+>     median_income unemployment_pp child_poverty_pp ///
+>     hs_completion_pp some_college_pp
+
+. 
+. global healthcare_covars ///
+>     uninsured_pp mh_providers_1000
+
+. 
+. global controls_pp ///
+>     $demographic_covars_pp median_income unemployment_pp child_poverty_pp ///
+>     pct_rural_pp hs_completion_pp some_college_pp ///
+>     $healthcare_covars
+
+. 
+. * Sequential adjustment blocks. Release-year fixed effects are added separately.
+. global adjust_m1 ///
+>     $demographic_covars_pp pct_rural_pp
+
+. 
+. global adjust_m2 ///
+>     $adjust_m1 $socioeconomic_core_pp
+
+. 
+. global adjust_m3 ///
+>     $adjust_m2 $healthcare_covars
+
+. 
+. * Reconstruct QA-specific common samples to verify the saved sample flags.
+. capture drop qa_nmiss_housing qa_nmiss_demo qa_nmiss_ses qa_nmiss_hc
+
+. capture drop qa_sample_mh qa_sample_sui
+
+. 
+. egen qa_nmiss_housing = rowmiss($housing_all_pp)
+
+. egen qa_nmiss_demo    = rowmiss($demographic_covars_pp)
+
+. egen qa_nmiss_ses     = rowmiss($socioeconomic_core_pp pct_rural_pp)
+
+. egen qa_nmiss_hc      = rowmiss($healthcare_covars)
+
+. 
+. gen byte qa_sample_mh = !missing(mental_health) & ///
+>     qa_nmiss_housing == 0 & qa_nmiss_demo == 0 & ///
+>     qa_nmiss_ses == 0 & qa_nmiss_hc == 0
+
+. 
+. gen byte qa_sample_sui = !missing(suicide_rate) & ///
+>     qa_nmiss_housing == 0 & qa_nmiss_demo == 0 & ///
+>     qa_nmiss_ses == 0 & qa_nmiss_hc == 0
+
+. 
+. label var qa_sample_mh  "QA complete-case sample: poor mental health days"
+
+. label var qa_sample_sui "QA complete-case sample: suicide mortality"
+
+. 
+. * Confirm consistency with sample flags saved by the corrected full analysis.
+. capture confirm variable sample_mh
+
+. if !_rc assert qa_sample_mh == sample_mh
+
+. 
+. capture confirm variable sample_suicide
+
+. if !_rc assert qa_sample_sui == sample_suicide
+
+. 
+. quietly count
+
+. local n_countyyear = r(N)
+
+. quietly count if qa_sample_mh == 1
+
+. local n_mh = r(N)
+
+. quietly count if qa_sample_sui == 1
+
+. local n_sui = r(N)
+
+. quietly count if !missing(suicide_rate)
+
+. local n_sui_observed = r(N)
+
+. 
+. di "================ QA SAMPLE VERIFICATION ================"
+================ QA SAMPLE VERIFICATION ================
+
+. di as result "Eligible county-release records: `n_countyyear'"
+Eligible county-release records: 9437
+
+. di as result "Poor mental health final sample: `n_mh'"
+Poor mental health final sample: 8843
+
+. di as result "Suicide outcome observed: `n_sui_observed'"
+Suicide outcome observed: 7308
+
+. di as result "Suicide final sample: `n_sui'"
+Suicide final sample: 7249
+
+. 
+. ********************************************************************************
+. * II-3. HELPER PROGRAM: POST COEFFICIENTS FROM THE MOST RECENT MODEL
+. ********************************************************************************
+. 
+. capture program drop qa_post_estimates
+
+. program define qa_post_estimates
+  1.     version 18
+  2.     syntax, HANDLE(name) OUTCOME(string asis) ANALYSIS(string asis) ///
+>         ADJUSTMENT(string asis) VARS(varlist)
+  3. 
+.     local model_n = e(N)
+  4.     local model_r2 = e(r2)
+  5.     local model_df = e(df_r)
+  6. 
+.     foreach v of local vars {
+  7.         capture local b = _b[`v']
+  8.         if !_rc {
+  9.             local se = _se[`v']
+ 10.             local tstat = `b' / `se'
+ 11.             local pval = 2 * ttail(`model_df', abs(`tstat'))
+ 12.             local crit = invttail(`model_df', 0.025)
+ 13.             local lo = `b' - `crit' * `se'
+ 14.             local hi = `b' + `crit' * `se'
+ 15.             local vlabel : variable label `v'
+ 16.             if `"`vlabel'"' == "" local vlabel "`v'"
+ 17. 
+.             post `handle' (`"`outcome'"') (`"`analysis'"') ///
+>                 (`"`adjustment'"') ("`v'") (`"`vlabel'"') ///
+>                 (`b') (`se') (`lo') (`hi') (`pval') ///
+>                 (`model_n') (`model_r2')
+ 18.         }
+ 19.     }
+ 20. end
+
+. 
+. ********************************************************************************
+. * II-4. SUICIDE OUTCOME AVAILABILITY AND SAMPLE-SELECTION COMPARISONS
+. ********************************************************************************
+. 
+. /*
+> Table S0D compares county-release observations with and without a reportable
+> age-adjusted suicide mortality estimate. The data alone identify differential
+> availability; the manuscript should separately cite CHR&R documentation for the
+> small-number suppression/reliability rule.
+> */
+. 
+. di "================ SUICIDE OUTCOME AVAILABILITY COMPARISON ================"
+================ SUICIDE OUTCOME AVAILABILITY COMPARISON ================
+
+. capture drop qa_sui_available qa_year_* qa_region_*
+
+. gen byte qa_sui_available = !missing(suicide_rate)
+
+. label define qa_avail_lbl 0 "Suicide estimate unavailable" 1 "Suicide estimate available", replace
+
+. label values qa_sui_available qa_avail_lbl
+
+. 
+. * Categorical indicators for release year and Census region.
+. foreach y in 2023 2024 2025 {
+  2.     gen byte qa_year_`y' = year == `y'
+  3.     label var qa_year_`y' "Release year `y', %"
+  4. }
+
+. 
+. gen byte qa_region_ne = region == 1
+
+. label var qa_region_ne "Northeast, %"
+
+. gen byte qa_region_mw = region == 2
+
+. label var qa_region_mw "Midwest, %"
+
+. gen byte qa_region_so = region == 3
+
+. label var qa_region_so "South, %"
+
+. gen byte qa_region_we = region == 4
+
+. label var qa_region_we "West, %"
+
+. 
+. local availability_cont ///
+>     pct_rural_pp median_income unemployment_pp child_poverty_pp ///
+>     uninsured_pp mh_providers_1000 ///
+>     severe_housing_cost_burden_pp pct_overcrowding_pp ///
+>     pct_lack_necessities_pp long_commute_pp homeownership_pp ///
+>     pct_under18_pp pct_over65_pp pct_female_pp ///
+>     pct_black_pp pct_white_pp pct_hispanic_pp ///
+>     hs_completion_pp some_college_pp mental_health
+
+. 
+. local availability_cat ///
+>     qa_year_2023 qa_year_2024 qa_year_2025 ///
+>     qa_region_ne qa_region_mw qa_region_so qa_region_we
+
+. 
+. tempname availpost
+
+. tempfile availdata
+
+. postfile `availpost' str80 characteristic str20 characteristic_type ///
+>     long available_n double available_mean available_sd ///
+>     long unavailable_n double unavailable_mean unavailable_sd ///
+>     double standardized_difference abs_standardized_difference ///
+>     using `availdata', replace
+(file /var/folders/w6/b__yj12d4sz89kvtbjc4m61c0000gn/T//S_43912.00000a not found)
+
+. 
+. foreach v of local availability_cont {
+  2.     quietly summarize `v' if qa_sui_available == 1
+  3.     local n1 = r(N)
+  4.     local m1 = r(mean)
+  5.     local s1 = r(sd)
+  6. 
+.     quietly summarize `v' if qa_sui_available == 0
+  7.     local n0 = r(N)
+  8.     local m0 = r(mean)
+  9.     local s0 = r(sd)
+ 10. 
+.     local smd = .
+ 11.     if (`n1' > 1 & `n0' > 1) {
+ 12.         local pooled_sd = sqrt((`s1'^2 + `s0'^2) / 2)
+ 13.         if (`pooled_sd' > 0) local smd = (`m1' - `m0') / `pooled_sd'
+ 14.     }
+ 15.     local abs_smd = abs(`smd')
+ 16.     local vlabel : variable label `v'
+ 17.     if `"`vlabel'"' == "" local vlabel "`v'"
+ 18. 
+.     post `availpost' (`"`vlabel'"') ("Continuous") ///
+>         (`n1') (`m1') (`s1') (`n0') (`m0') (`s0') ///
+>         (`smd') (`abs_smd')
+ 19. }
+
+. 
+. foreach v of local availability_cat {
+  2.     quietly summarize `v' if qa_sui_available == 1
+  3.     local n1 = r(N)
+  4.     local p1 = r(mean)
+  5. 
+.     quietly summarize `v' if qa_sui_available == 0
+  6.     local n0 = r(N)
+  7.     local p0 = r(mean)
+  8. 
+.     local smd = .
+  9.     local pooled_pvar = ((`p1' * (1 - `p1')) + (`p0' * (1 - `p0'))) / 2
+ 10.     if (`pooled_pvar' > 0) local smd = (`p1' - `p0') / sqrt(`pooled_pvar')
+ 11.     local abs_smd = abs(`smd')
+ 12.     local vlabel : variable label `v'
+ 13. 
+.     post `availpost' (`"`vlabel'"') ("Categorical, %") ///
+>         (`n1') (100 * `p1') (.) (`n0') (100 * `p0') (.) ///
+>         (`smd') (`abs_smd')
+ 14. }
+
+. postclose `availpost'
+
+. 
+. preserve
+
+.     use `availdata', clear
+
+.     gsort -abs_standardized_difference characteristic
+
+.     format available_mean unavailable_mean available_sd unavailable_sd %12.3f
+
+.     format standardized_difference abs_standardized_difference %9.3f
+
+.     save "$processed/suicide_availability_comparison.dta", replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/1.processed_data/suicide_availability_comparison.dta saved
+
+.     export excel using "$output/TableS0D_Suicide_availability_comparison.xlsx", ///
+>         firstrow(variables) replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0D_Suicide_availability_compar
+> ison.xlsx saved
+
+.     export delimited using "$output/TableS0D_Suicide_availability_comparison.csv", replace
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0D_Suicide_availability_comparison.csv not found)
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0D_Suicide_availability_compar
+> ison.csv saved
+
+. restore
+
+. 
+. * Additional comparison: among county-releases with a suicide estimate, compare
+. * final complete cases with the small number excluded for exposure/covariate missingness.
+. di "================ SUICIDE COMPLETE-CASE COMPARISON ================"
+================ SUICIDE COMPLETE-CASE COMPARISON ================
+
+. capture drop qa_sui_final
+
+. gen byte qa_sui_final = qa_sample_sui if qa_sui_available == 1
+(2,129 missing values generated)
+
+. label define qa_final_lbl 0 "Outcome observed but excluded" 1 "Final analytic sample", replace
+
+. label values qa_sui_final qa_final_lbl
+
+. 
+. tempname ccpost
+
+. tempfile ccdata
+
+. postfile `ccpost' str80 characteristic str20 characteristic_type ///
+>     long included_n double included_mean included_sd ///
+>     long excluded_n double excluded_mean excluded_sd ///
+>     double standardized_difference abs_standardized_difference ///
+>     using `ccdata', replace
+(file /var/folders/w6/b__yj12d4sz89kvtbjc4m61c0000gn/T//S_43912.00000c not found)
+
+. 
+. foreach v of local availability_cont {
+  2.     quietly summarize `v' if qa_sui_available == 1 & qa_sui_final == 1
+  3.     local n1 = r(N)
+  4.     local m1 = r(mean)
+  5.     local s1 = r(sd)
+  6. 
+.     quietly summarize `v' if qa_sui_available == 1 & qa_sui_final == 0
+  7.     local n0 = r(N)
+  8.     local m0 = r(mean)
+  9.     local s0 = r(sd)
+ 10. 
+.     local smd = .
+ 11.     if (`n1' > 1 & `n0' > 1) {
+ 12.         local pooled_sd = sqrt((`s1'^2 + `s0'^2) / 2)
+ 13.         if (`pooled_sd' > 0) local smd = (`m1' - `m0') / `pooled_sd'
+ 14.     }
+ 15.     local abs_smd = abs(`smd')
+ 16.     local vlabel : variable label `v'
+ 17.     if `"`vlabel'"' == "" local vlabel "`v'"
+ 18. 
+.     post `ccpost' (`"`vlabel'"') ("Continuous") ///
+>         (`n1') (`m1') (`s1') (`n0') (`m0') (`s0') ///
+>         (`smd') (`abs_smd')
+ 19. }
+
+. 
+. foreach v of local availability_cat {
+  2.     quietly summarize `v' if qa_sui_available == 1 & qa_sui_final == 1
+  3.     local n1 = r(N)
+  4.     local p1 = r(mean)
+  5. 
+.     quietly summarize `v' if qa_sui_available == 1 & qa_sui_final == 0
+  6.     local n0 = r(N)
+  7.     local p0 = r(mean)
+  8. 
+.     local smd = .
+  9.     local pooled_pvar = ((`p1' * (1 - `p1')) + (`p0' * (1 - `p0'))) / 2
+ 10.     if (`pooled_pvar' > 0) local smd = (`p1' - `p0') / sqrt(`pooled_pvar')
+ 11.     local abs_smd = abs(`smd')
+ 12.     local vlabel : variable label `v'
+ 13. 
+.     post `ccpost' (`"`vlabel'"') ("Categorical, %") ///
+>         (`n1') (100 * `p1') (.) (`n0') (100 * `p0') (.) ///
+>         (`smd') (`abs_smd')
+ 14. }
+
+. postclose `ccpost'
+
+. 
+. preserve
+
+.     use `ccdata', clear
+
+.     gsort -abs_standardized_difference characteristic
+
+.     format included_mean excluded_mean included_sd excluded_sd %12.3f
+
+.     format standardized_difference abs_standardized_difference %9.3f
+
+.     save "$processed/suicide_complete_case_comparison.dta", replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/1.processed_data/suicide_complete_case_comparison.dta saved
+
+.     export excel using "$output/TableS0E_Suicide_complete_case_comparison.xlsx", ///
+>         firstrow(variables) replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0E_Suicide_complete_case_compa
+> rison.xlsx saved
+
+.     export delimited using "$output/TableS0E_Suicide_complete_case_comparison.csv", replace
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0E_Suicide_complete_case_comparison.csv not found)
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0E_Suicide_complete_case_compa
+> rison.csv saved
+
+. restore
+
+. 
+. ********************************************************************************
+. * II-5. SEQUENTIAL COVARIATE-ADJUSTMENT MODELS
+. ********************************************************************************
+. 
+. /*
+> All nested models for a given outcome use the same final complete-case sample.
+> This isolates changes due to covariate blocks rather than changes in observations.
+> 
+> Model 1: release year + demographic composition + rural population share
+> Model 2: Model 1 + socioeconomic context
+> Model 3: Model 2 + uninsured rate + mental health provider density
+> */
+. 
+. di "================ SEQUENTIAL COVARIATE ADJUSTMENT ================"
+================ SEQUENTIAL COVARIATE ADJUSTMENT ================
+
+. tempname seqpost
+
+. tempfile seqdata
+
+. postfile `seqpost' str35 outcome str55 analysis_name str40 adjustment_level ///
+>     str40 variable_name str80 variable_label ///
+>     double beta standard_error ci_lower ci_upper p_value ///
+>     long observations double r_squared using `seqdata', replace
+(file /var/folders/w6/b__yj12d4sz89kvtbjc4m61c0000gn/T//S_43912.00000e not found)
+
+. 
+. eststo clear
+
+. 
+. * Key association 1: long commuting -> poor mental health days.
+. reg mental_health long_commute_pp $adjust_m1 i.year if qa_sample_mh == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(10, 2977)       =    1226.57
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.3176
+                                                Root MSE          =     .57463
+
+                              (Std. err. adjusted for 2,978 clusters in fipscode)
+---------------------------------------------------------------------------------
+                |               Robust
+  mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------+----------------------------------------------------------------
+long_commute_pp |   .0047138   .0009096     5.18   0.000     .0029302    .0064974
+  pct_over65_pp |  -.0230545   .0034134    -6.75   0.000    -.0297473   -.0163617
+ pct_under18_pp |  -.0273851   .0045198    -6.06   0.000    -.0362473   -.0185229
+  pct_female_pp |    .053415   .0052118    10.25   0.000     .0431958    .0636342
+   pct_black_pp |   .0021013   .0015632     1.34   0.179    -.0009637    .0051663
+   pct_white_pp |   -.001987   .0014548    -1.37   0.172    -.0048395    .0008654
+pct_hispanic_pp |  -.0012208   .0014935    -0.82   0.414    -.0041493    .0017077
+   pct_rural_pp |   .0049479   .0004109    12.04   0.000     .0041422    .0057536
+                |
+           year |
+          2024  |     .39022   .0066808    58.41   0.000     .3771206    .4033195
+          2025  |   .8155396   .0080594   101.19   0.000     .7997371    .8313421
+                |
+          _cons |    2.94087   .2902457    10.13   0.000     2.371767    3.509972
+---------------------------------------------------------------------------------
+
+. eststo qseq_mh_long_m1
+
+. qa_post_estimates, handle(`seqpost') outcome("Poor mental health days") ///
+>     analysis("Long commuting") adjustment("Model 1: demographic/geographic") ///
+>     vars(long_commute_pp)
+
+. 
+. reg mental_health long_commute_pp $adjust_m2 i.year if qa_sample_mh == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(15, 2977)       =     964.61
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6488
+                                                Root MSE          =     .41231
+
+                               (Std. err. adjusted for 2,978 clusters in fipscode)
+----------------------------------------------------------------------------------
+                 |               Robust
+   mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+-----------------+----------------------------------------------------------------
+ long_commute_pp |   .0066233   .0007065     9.38   0.000      .005238    .0080085
+   pct_over65_pp |  -.0341307   .0025212   -13.54   0.000    -.0390742   -.0291873
+  pct_under18_pp |  -.0419789   .0032537   -12.90   0.000    -.0483587   -.0355991
+   pct_female_pp |   .0680153   .0043846    15.51   0.000     .0594182    .0766125
+    pct_black_pp |  -.0129233   .0011816   -10.94   0.000    -.0152403   -.0106064
+    pct_white_pp |   .0000947   .0010357     0.09   0.927    -.0019361    .0021254
+ pct_hispanic_pp |  -.0101286   .0011331    -8.94   0.000    -.0123503   -.0079068
+    pct_rural_pp |  -.0024393   .0003247    -7.51   0.000     -.003076   -.0018027
+   median_income |  -6.74e-06   7.94e-07    -8.48   0.000    -8.29e-06   -5.18e-06
+ unemployment_pp |   .0445467   .0058883     7.57   0.000     .0330011    .0560924
+child_poverty_pp |   .0194523   .0018807    10.34   0.000     .0157648    .0231398
+hs_completion_pp |  -.0120612   .0024078    -5.01   0.000    -.0167823   -.0073402
+ some_college_pp |  -.0189624    .001047   -18.11   0.000    -.0210153   -.0169095
+                 |
+            year |
+           2024  |   .5324434   .0089781    59.30   0.000     .5148395    .5500472
+           2025  |    .998549   .0109506    91.19   0.000     .9770775    1.020021
+                 |
+           _cons |   5.156542    .325098    15.86   0.000     4.519102    5.793981
+----------------------------------------------------------------------------------
+
+. eststo qseq_mh_long_m2
+
+. qa_post_estimates, handle(`seqpost') outcome("Poor mental health days") ///
+>     analysis("Long commuting") adjustment("Model 2: plus socioeconomic") ///
+>     vars(long_commute_pp)
+
+. 
+. reg mental_health long_commute_pp $adjust_m3 i.year if qa_sample_mh == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(17, 2977)       =     858.81
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6511
+                                                Root MSE          =     .41106
+
+                                (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------
+                  |               Robust
+    mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------+----------------------------------------------------------------
+  long_commute_pp |   .0073262   .0007162    10.23   0.000     .0059219    .0087305
+    pct_over65_pp |  -.0333299   .0025276   -13.19   0.000    -.0382861   -.0283738
+   pct_under18_pp |  -.0394891   .0033089   -11.93   0.000    -.0459771   -.0330011
+    pct_female_pp |   .0651895   .0044091    14.79   0.000     .0565443    .0738347
+     pct_black_pp |  -.0117184   .0012069    -9.71   0.000    -.0140849   -.0093519
+     pct_white_pp |   .0015046   .0010641     1.41   0.157    -.0005818    .0035909
+  pct_hispanic_pp |  -.0098243   .0011248    -8.73   0.000    -.0120298   -.0076188
+     pct_rural_pp |  -.0024247   .0003236    -7.49   0.000    -.0030592   -.0017903
+    median_income |  -6.69e-06   7.97e-07    -8.39   0.000    -8.25e-06   -5.13e-06
+  unemployment_pp |   .0477741   .0060652     7.88   0.000     .0358818    .0596664
+ child_poverty_pp |   .0192179   .0018587    10.34   0.000     .0155735    .0228624
+ hs_completion_pp |  -.0108449   .0023984    -4.52   0.000    -.0155476   -.0061422
+  some_college_pp |  -.0186414   .0010598   -17.59   0.000    -.0207194   -.0165635
+     uninsured_pp |    .006544   .0016507     3.96   0.000     .0033074    .0097806
+mh_providers_1000 |   .0141761   .0039046     3.63   0.000     .0065202    .0218321
+                  |
+             year |
+            2024  |   .5360369   .0091248    58.74   0.000     .5181452    .5539285
+            2025  |     1.0063   .0114016    88.26   0.000     .9839442    1.028656
+                  |
+            _cons |   4.839792   .3297765    14.68   0.000      4.19318    5.486405
+-----------------------------------------------------------------------------------
+
+. eststo qseq_mh_long_m3
+
+. qa_post_estimates, handle(`seqpost') outcome("Poor mental health days") ///
+>     analysis("Long commuting") adjustment("Model 3: plus health care") ///
+>     vars(long_commute_pp)
+
+. 
+. * Key association 2: overcrowding -> suicide mortality.
+. reg suicide_rate pct_overcrowding_pp $adjust_m1 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(10, 2503)       =     103.32
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.3764
+                                                Root MSE          =     6.1237
+
+                                  (Std. err. adjusted for 2,504 clusters in fipscode)
+-------------------------------------------------------------------------------------
+                    |               Robust
+       suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+pct_overcrowding_pp |   .4044653   .1949146     2.08   0.038     .0222549    .7866757
+      pct_over65_pp |   .6896411   .0521277    13.23   0.000     .5874233    .7918589
+     pct_under18_pp |   .6594835   .0664631     9.92   0.000     .5291551    .7898118
+      pct_female_pp |  -.6925654   .0813496    -8.51   0.000    -.8520849   -.5330458
+       pct_black_pp |  -.3172991   .0330089    -9.61   0.000    -.3820267   -.2525716
+       pct_white_pp |  -.2277599   .0339623    -6.71   0.000    -.2943569   -.1611628
+    pct_hispanic_pp |  -.2905877   .0329526    -8.82   0.000    -.3552048   -.2259705
+       pct_rural_pp |   .0406434   .0057771     7.04   0.000     .0293151    .0519717
+                    |
+               year |
+              2024  |  -.0063876   .0930937    -0.07   0.945    -.1889362     .176161
+              2025  |  -.0938216   .1125384    -0.83   0.405    -.3144995    .1268563
+                    |
+              _cons |   45.40577   4.832777     9.40   0.000     35.92911    54.88242
+-------------------------------------------------------------------------------------
+
+. eststo qseq_sui_crowd_m1
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Overcrowding") adjustment("Model 1: demographic/geographic") ///
+>     vars(pct_overcrowding_pp)
+
+. 
+. reg suicide_rate pct_overcrowding_pp $adjust_m2 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(15, 2503)       =     106.61
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4540
+                                                Root MSE          =     5.7319
+
+                                  (Std. err. adjusted for 2,504 clusters in fipscode)
+-------------------------------------------------------------------------------------
+                    |               Robust
+       suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+pct_overcrowding_pp |   .5433551    .190809     2.85   0.004     .1691955    .9175148
+      pct_over65_pp |   .4966996   .0459501    10.81   0.000     .4065955    .5868038
+     pct_under18_pp |    .580669    .060205     9.64   0.000     .4626124    .6987257
+      pct_female_pp |  -.6533233   .0785366    -8.32   0.000    -.8073267     -.49932
+       pct_black_pp |  -.3277107   .0329954    -9.93   0.000    -.3924117   -.2630097
+       pct_white_pp |  -.1997332   .0322273    -6.20   0.000    -.2629282   -.1365382
+    pct_hispanic_pp |  -.1975954   .0321189    -6.15   0.000    -.2605777   -.1346131
+       pct_rural_pp |    .030039    .005863     5.12   0.000     .0185421    .0415359
+      median_income |  -.0001118   .0000116    -9.60   0.000    -.0001346   -.0000889
+    unemployment_pp |  -.5236378   .1073326    -4.88   0.000    -.7341076   -.3131679
+   child_poverty_pp |   .1875685   .0358463     5.23   0.000      .117277      .25786
+   hs_completion_pp |   .5327574   .0514233    10.36   0.000      .431921    .6335939
+    some_college_pp |  -.0656178   .0212112    -3.09   0.002    -.1072111   -.0240246
+                    |
+               year |
+              2024  |  -.0375671   .1662053    -0.23   0.821     -.363481    .2883469
+              2025  |   .0651125   .1816232     0.36   0.720    -.2910346    .4212596
+                    |
+              _cons |   8.660833   6.678586     1.30   0.195    -4.435288    21.75695
+-------------------------------------------------------------------------------------
+
+. eststo qseq_sui_crowd_m2
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Overcrowding") adjustment("Model 2: plus socioeconomic") ///
+>     vars(pct_overcrowding_pp)
+
+. 
+. reg suicide_rate pct_overcrowding_pp $adjust_m3 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(17, 2503)       =     103.75
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4702
+                                                Root MSE          =     5.6469
+
+                                  (Std. err. adjusted for 2,504 clusters in fipscode)
+-------------------------------------------------------------------------------------
+                    |               Robust
+       suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+pct_overcrowding_pp |   .4648245   .1919635     2.42   0.016     .0884009    .8412482
+      pct_over65_pp |   .4870129   .0455671    10.69   0.000     .3976598     .576366
+     pct_under18_pp |   .6050083   .0605474     9.99   0.000     .4862802    .7237363
+      pct_female_pp |  -.7073419   .0781323    -9.05   0.000    -.8605525   -.5541314
+       pct_black_pp |  -.3074778   .0331258    -9.28   0.000    -.3724346    -.242521
+       pct_white_pp |  -.1668492   .0321376    -5.19   0.000    -.2298683   -.1038302
+    pct_hispanic_pp |  -.2112051   .0321084    -6.58   0.000    -.2741668   -.1482433
+       pct_rural_pp |   .0295315   .0060136     4.91   0.000     .0177393    .0413238
+      median_income |  -.0000925   .0000114    -8.10   0.000    -.0001149   -.0000701
+    unemployment_pp |  -.2584557   .1116095    -2.32   0.021    -.4773121   -.0395993
+   child_poverty_pp |   .1875553   .0358151     5.24   0.000      .117325    .2577857
+   hs_completion_pp |   .5606815   .0523906    10.70   0.000     .4579481    .6634148
+    some_college_pp |   -.052997   .0214607    -2.47   0.014    -.0950795   -.0109145
+       uninsured_pp |   .2738715    .033039     8.29   0.000      .209085     .338658
+  mh_providers_1000 |   .2696071    .079142     3.41   0.001     .1144165    .4247977
+                    |
+               year |
+              2024  |   .2554395   .1744869     1.46   0.143     -.086714    .5975931
+              2025  |   .5452485   .1958376     2.78   0.005     .1612281    .9292689
+                    |
+              _cons |  -.6185883   6.736874    -0.09   0.927    -13.82901    12.59183
+-------------------------------------------------------------------------------------
+
+. eststo qseq_sui_crowd_m3
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Overcrowding") adjustment("Model 3: plus health care") ///
+>     vars(pct_overcrowding_pp)
+
+. 
+. * Key association 3: lack of kitchen/plumbing facilities -> suicide mortality.
+. reg suicide_rate pct_lack_necessities_pp $adjust_m1 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(10, 2503)       =     104.41
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.3849
+                                                Root MSE          =     6.0816
+
+                                      (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------
+                        |               Robust
+           suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------+----------------------------------------------------------------
+pct_lack_necessities_pp |   .7385249   .2483763     2.97   0.003     .2514806    1.225569
+          pct_over65_pp |   .6570671   .0509895    12.89   0.000     .5570812     .757053
+         pct_under18_pp |   .6576025   .0680466     9.66   0.000     .5241691    .7910358
+          pct_female_pp |  -.6641189   .0815412    -8.14   0.000    -.8240141   -.5042238
+           pct_black_pp |  -.3108883   .0336457    -9.24   0.000    -.3768646    -.244912
+           pct_white_pp |  -.2271815   .0338808    -6.71   0.000    -.2936187   -.1607442
+        pct_hispanic_pp |  -.2609431   .0357033    -7.31   0.000     -.330954   -.1909321
+           pct_rural_pp |   .0420582   .0052944     7.94   0.000     .0316763    .0524401
+                        |
+                   year |
+                  2024  |  -.0335571   .0892629    -0.38   0.707    -.2085938    .1414796
+                  2025  |  -.1222645   .1080594    -1.13   0.258    -.3341595    .0896305
+                        |
+                  _cons |   44.33525   5.034436     8.81   0.000     34.46316    54.20733
+-----------------------------------------------------------------------------------------
+
+. eststo qseq_sui_lack_m1
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Lack kitchen/plumbing facilities") ///
+>     adjustment("Model 1: demographic/geographic") vars(pct_lack_necessities_pp)
+
+. 
+. reg suicide_rate pct_lack_necessities_pp $adjust_m2 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(15, 2503)       =     108.91
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4546
+                                                Root MSE          =      5.729
+
+                                      (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------
+                        |               Robust
+           suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------+----------------------------------------------------------------
+pct_lack_necessities_pp |   .6550227   .2472425     2.65   0.008     .1702019    1.139843
+          pct_over65_pp |    .475387   .0456431    10.42   0.000     .3858848    .5648893
+         pct_under18_pp |   .5953018   .0627832     9.48   0.000     .4721895    .7184142
+          pct_female_pp |  -.6380389   .0770931    -8.28   0.000    -.7892116   -.4868662
+           pct_black_pp |  -.3499352   .0327697   -10.68   0.000    -.4141936   -.2856767
+           pct_white_pp |  -.2273616   .0316622    -7.18   0.000    -.2894483   -.1652749
+        pct_hispanic_pp |  -.1945089   .0345837    -5.62   0.000    -.2623246   -.1266933
+           pct_rural_pp |   .0320838   .0057384     5.59   0.000     .0208313    .0433363
+          median_income |  -.0001018   .0000115    -8.83   0.000    -.0001244   -.0000792
+        unemployment_pp |  -.5110183   .1060261    -4.82   0.000    -.7189262   -.3031103
+       child_poverty_pp |   .1872272     .03544     5.28   0.000     .1177325     .256722
+       hs_completion_pp |   .4882685   .0464297    10.52   0.000      .397224    .5793131
+        some_college_pp |  -.0664112   .0210364    -3.16   0.002    -.1076618   -.0251607
+                        |
+                   year |
+                  2024  |  -.0857918   .1545075    -0.56   0.579    -.3887674    .2171837
+                  2025  |   .0022067   .1683998     0.01   0.990    -.3280106    .3324239
+                        |
+                  _cons |   14.03604   6.209447     2.26   0.024     1.859858    26.21222
+-----------------------------------------------------------------------------------------
+
+. eststo qseq_sui_lack_m2
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Lack kitchen/plumbing facilities") ///
+>     adjustment("Model 2: plus socioeconomic") vars(pct_lack_necessities_pp)
+
+. 
+. reg suicide_rate pct_lack_necessities_pp $adjust_m3 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(17, 2503)       =     105.74
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4700
+                                                Root MSE          =     5.6479
+
+                                      (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------
+                        |               Robust
+           suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------+----------------------------------------------------------------
+pct_lack_necessities_pp |   .5444547    .256993     2.12   0.034     .0405141    1.048395
+          pct_over65_pp |   .4677367   .0454879    10.28   0.000      .378539    .5569344
+         pct_under18_pp |   .6147428    .063042     9.75   0.000      .491123    .7383626
+          pct_female_pp |  -.6941194   .0776867    -8.93   0.000    -.8464563   -.5417826
+           pct_black_pp |  -.3300373   .0330349    -9.99   0.000    -.3948158   -.2652587
+           pct_white_pp |  -.1934091     .03177    -6.09   0.000    -.2557073    -.131111
+        pct_hispanic_pp |   -.211643    .034602    -6.12   0.000    -.2794945   -.1437915
+           pct_rural_pp |   .0307669    .005859     5.25   0.000     .0192779    .0422559
+          median_income |  -.0000843   .0000113    -7.47   0.000    -.0001064   -.0000622
+        unemployment_pp |  -.2421619   .1114605    -2.17   0.030    -.4607263   -.0235976
+       child_poverty_pp |   .1883096   .0354151     5.32   0.000     .1188637    .2577556
+       hs_completion_pp |    .523062   .0479179    10.92   0.000     .4290991    .6170248
+        some_college_pp |  -.0530647   .0212491    -2.50   0.013    -.0947322   -.0113971
+           uninsured_pp |   .2732804   .0330888     8.26   0.000     .2083963    .3381645
+      mh_providers_1000 |   .2444338   .0818789     2.99   0.003     .0838765    .4049911
+                        |
+                   year |
+                  2024  |   .2263157   .1641624     1.38   0.168    -.0955924    .5482238
+                  2025  |   .5072254   .1846296     2.75   0.006     .1451829    .8692678
+                        |
+                  _cons |   4.332861   6.273518     0.69   0.490    -7.968957    16.63468
+-----------------------------------------------------------------------------------------
+
+. eststo qseq_sui_lack_m3
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Lack kitchen/plumbing facilities") ///
+>     adjustment("Model 3: plus health care") vars(pct_lack_necessities_pp)
+
+. 
+. esttab ///
+>     qseq_mh_long_m1 qseq_mh_long_m2 qseq_mh_long_m3 ///
+>     qseq_sui_crowd_m1 qseq_sui_crowd_m2 qseq_sui_crowd_m3 ///
+>     qseq_sui_lack_m1 qseq_sui_lack_m2 qseq_sui_lack_m3 ///
+>     using "$output/TableS0F1_Sequential_key_exposures.rtf", replace ///
+>     keep(long_commute_pp pct_overcrowding_pp pct_lack_necessities_pp) ///
+>     mtitles("Commute M1" "Commute M2" "Commute M3" ///
+>             "Crowding M1" "Crowding M2" "Crowding M3" ///
+>             "Facilities M1" "Facilities M2" "Facilities M3") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared")) ///
+>     title("Sequential adjustment for key housing-outcome associations")
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F1_Sequential_key_exposures.rtf not found)
+(output written to /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F1_Sequential_k
+> ey_exposures.rtf)
+
+. 
+. * Mutually adjusted housing model: poor mental health days.
+. reg mental_health $housing_pp $adjust_m1 i.year if qa_sample_mh == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(14, 2977)       =     881.67
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.3421
+                                                Root MSE          =     .56434
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0076308    .004037     1.89   0.059    -.0002847    .0155463
+          pct_overcrowding_pp |   .0332214   .0070296     4.73   0.000      .019438    .0470049
+      pct_lack_necessities_pp |   .0331884   .0078841     4.21   0.000     .0177295    .0486473
+              long_commute_pp |   .0076244   .0010789     7.07   0.000     .0055089    .0097399
+             homeownership_pp |  -.0099951   .0023146    -4.32   0.000    -.0145335   -.0054566
+                pct_over65_pp |  -.0133134   .0037969    -3.51   0.000    -.0207582   -.0058687
+               pct_under18_pp |  -.0202109   .0048995    -4.13   0.000    -.0298176   -.0106042
+                pct_female_pp |    .046799   .0053683     8.72   0.000     .0362732    .0573249
+                 pct_black_pp |   .0089903    .001889     4.76   0.000     .0052864    .0126943
+                 pct_white_pp |   .0078554   .0018684     4.20   0.000     .0041919     .011519
+              pct_hispanic_pp |   .0047836   .0016956     2.82   0.005      .001459    .0081082
+                 pct_rural_pp |   .0048976   .0004174    11.73   0.000     .0040792    .0057161
+                              |
+                         year |
+                        2024  |   .3904152   .0066893    58.36   0.000     .3772991    .4035314
+                        2025  |   .8152619    .008358    97.54   0.000     .7988739    .8316499
+                              |
+                        _cons |   2.482312   .3273866     7.58   0.000     1.840385    3.124239
+-----------------------------------------------------------------------------------------------
+
+. eststo qseq_mh_all_m1
+
+. qa_post_estimates, handle(`seqpost') outcome("Poor mental health days") ///
+>     analysis("Mutually adjusted housing model") ///
+>     adjustment("Model 1: demographic/geographic") vars($housing_pp)
+
+. 
+. reg mental_health $housing_pp $adjust_m2 i.year if qa_sample_mh == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(19, 2977)       =     771.21
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6500
+                                                Root MSE          =     .41176
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0081145   .0029425     2.76   0.006     .0023449    .0138841
+          pct_overcrowding_pp |  -.0040244   .0048687    -0.83   0.409    -.0135709     .005522
+      pct_lack_necessities_pp |   .0054693    .004793     1.14   0.254    -.0039287    .0148672
+              long_commute_pp |   .0060974   .0007833     7.78   0.000     .0045616    .0076332
+             homeownership_pp |   .0034912   .0016233     2.15   0.032     .0003083    .0066742
+                pct_over65_pp |  -.0363021    .002906   -12.49   0.000    -.0420001   -.0306041
+               pct_under18_pp |  -.0415143   .0036952   -11.23   0.000    -.0487597    -.034269
+                pct_female_pp |   .0676114   .0045591    14.83   0.000     .0586721    .0765508
+                 pct_black_pp |  -.0134633   .0013904    -9.68   0.000    -.0161895   -.0107372
+                 pct_white_pp |   -.000361   .0012802    -0.28   0.778     -.002871    .0021491
+              pct_hispanic_pp |  -.0105089   .0013055    -8.05   0.000    -.0130687   -.0079491
+                 pct_rural_pp |  -.0024561   .0003476    -7.07   0.000    -.0031376   -.0017746
+                median_income |  -7.04e-06   7.99e-07    -8.80   0.000    -8.60e-06   -5.47e-06
+              unemployment_pp |     .04134   .0060347     6.85   0.000     .0295073    .0531727
+             child_poverty_pp |   .0194283   .0018934    10.26   0.000     .0157157    .0231408
+             hs_completion_pp |  -.0125757    .002432    -5.17   0.000    -.0173442   -.0078071
+              some_college_pp |  -.0188826   .0010331   -18.28   0.000    -.0209082    -.016857
+                              |
+                         year |
+                        2024  |   .5291097   .0090029    58.77   0.000     .5114571    .5467623
+                        2025  |   .9943804   .0112017    88.77   0.000     .9724165    1.016344
+                              |
+                        _cons |    5.00721   .3441472    14.55   0.000      4.33242    5.682001
+-----------------------------------------------------------------------------------------------
+
+. eststo qseq_mh_all_m2
+
+. qa_post_estimates, handle(`seqpost') outcome("Poor mental health days") ///
+>     analysis("Mutually adjusted housing model") ///
+>     adjustment("Model 2: plus socioeconomic") vars($housing_pp)
+
+. 
+. reg mental_health $housing_pp $adjust_m3 i.year if qa_sample_mh == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(21, 2977)       =     702.76
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6521
+                                                Root MSE          =     .41055
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0073638   .0029486     2.50   0.013     .0015823    .0131453
+          pct_overcrowding_pp |  -.0043963   .0048601    -0.90   0.366    -.0139257    .0051332
+      pct_lack_necessities_pp |    .002669    .005016     0.53   0.595    -.0071662    .0125041
+              long_commute_pp |   .0067036   .0007793     8.60   0.000     .0051756    .0082317
+             homeownership_pp |   .0037197   .0016248     2.29   0.022     .0005339    .0069056
+                pct_over65_pp |  -.0357838   .0028786   -12.43   0.000     -.041428   -.0301397
+               pct_under18_pp |  -.0393975   .0036684   -10.74   0.000    -.0465903   -.0322047
+                pct_female_pp |   .0649967   .0045812    14.19   0.000     .0560141    .0739793
+                 pct_black_pp |  -.0125572   .0013802    -9.10   0.000    -.0152634   -.0098509
+                 pct_white_pp |   .0006954   .0012553     0.55   0.580    -.0017659    .0031568
+              pct_hispanic_pp |  -.0104974   .0012711    -8.26   0.000    -.0129898    -.008005
+                 pct_rural_pp |  -.0024604    .000343    -7.17   0.000     -.003133   -.0017878
+                median_income |  -7.01e-06   8.04e-07    -8.71   0.000    -8.58e-06   -5.43e-06
+              unemployment_pp |   .0452906    .006236     7.26   0.000     .0330633    .0575179
+             child_poverty_pp |   .0192716    .001867    10.32   0.000     .0156108    .0229324
+             hs_completion_pp |   -.011453   .0024222    -4.73   0.000    -.0162023   -.0067037
+              some_college_pp |  -.0185332   .0010455   -17.73   0.000    -.0205832   -.0164832
+                 uninsured_pp |   .0065134   .0016703     3.90   0.000     .0032383    .0097885
+            mh_providers_1000 |   .0140547   .0040793     3.45   0.001     .0060562    .0220532
+                              |
+                         year |
+                        2024  |    .533859   .0091729    58.20   0.000     .5158731    .5518449
+                        2025  |    1.00353   .0116377    86.23   0.000     .9807115    1.026349
+                              |
+                        _cons |    4.72958   .3453643    13.69   0.000     4.052403    5.406757
+-----------------------------------------------------------------------------------------------
+
+. eststo qseq_mh_all_m3
+
+. qa_post_estimates, handle(`seqpost') outcome("Poor mental health days") ///
+>     analysis("Mutually adjusted housing model") ///
+>     adjustment("Model 3: plus health care") vars($housing_pp)
+
+. 
+. * Mutually adjusted housing model: suicide mortality.
+. reg suicide_rate $housing_pp $adjust_m1 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(14, 2503)       =      82.01
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4018
+                                                Root MSE          =     5.9995
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0193119   .0584629    -0.33   0.741    -.1339526    .0953287
+          pct_overcrowding_pp |   .0966076   .1568197     0.62   0.538     -.210902    .4041173
+      pct_lack_necessities_pp |   .5929715   .2224023     2.67   0.008     .1568601    1.029083
+              long_commute_pp |  -.0528182   .0127445    -4.14   0.000    -.0778091   -.0278273
+             homeownership_pp |   -.099974   .0276499    -3.62   0.000     -.154193   -.0457549
+                pct_over65_pp |   .6784135   .0578671    11.72   0.000     .5649412    .7918858
+               pct_under18_pp |   .6458592   .0781664     8.26   0.000     .4925817    .7991367
+                pct_female_pp |  -.6279138   .0818659    -7.67   0.000    -.7884456   -.4673821
+                 pct_black_pp |  -.2925905   .0344037    -8.50   0.000    -.3600531   -.2251279
+                 pct_white_pp |   -.197944   .0334115    -5.92   0.000     -.263461    -.132427
+              pct_hispanic_pp |  -.2420255   .0339776    -7.12   0.000    -.3086525   -.1753985
+                 pct_rural_pp |   .0599997   .0063935     9.38   0.000     .0474626    .0725369
+                              |
+                         year |
+                        2024  |   -.066424   .0943494    -0.70   0.481    -.2514348    .1185869
+                        2025  |  -.1213067    .116142    -1.04   0.296     -.349051    .1064376
+                              |
+                        _cons |   47.99958   5.353336     8.97   0.000     37.50216    58.49701
+-----------------------------------------------------------------------------------------------
+
+. eststo qseq_sui_all_m1
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Mutually adjusted housing model") ///
+>     adjustment("Model 1: demographic/geographic") vars($housing_pp)
+
+. 
+. reg suicide_rate $housing_pp $adjust_m2 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(19, 2503)       =      85.88
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4585
+                                                Root MSE          =     5.7096
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0286244   .0574827     0.50   0.619    -.0840942     .141343
+          pct_overcrowding_pp |   .3533567   .1512782     2.34   0.020     .0567135    .6499999
+      pct_lack_necessities_pp |   .4709822   .1989471     2.37   0.018     .0808643    .8611001
+              long_commute_pp |   .0062545   .0130254     0.48   0.631    -.0192871    .0317961
+             homeownership_pp |  -.0093985   .0260272    -0.36   0.718    -.0604356    .0416386
+                pct_over65_pp |   .5014494   .0564032     8.89   0.000     .3908477    .6120511
+               pct_under18_pp |   .6006283   .0733545     8.19   0.000     .4567866    .7444701
+                pct_female_pp |  -.6521631   .0826983    -7.89   0.000    -.8143272    -.489999
+                 pct_black_pp |  -.3149281   .0354926    -8.87   0.000     -.384526   -.2453302
+                 pct_white_pp |  -.1868423   .0330501    -5.65   0.000    -.2516506    -.122034
+              pct_hispanic_pp |  -.1749334   .0342055    -5.11   0.000    -.2420074   -.1078594
+                 pct_rural_pp |     .03071   .0066759     4.60   0.000     .0176191    .0438008
+                median_income |  -.0001074   .0000133    -8.07   0.000    -.0001335   -.0000813
+              unemployment_pp |  -.5746397   .1006303    -5.71   0.000     -.771967   -.3773124
+             child_poverty_pp |   .1863887   .0351902     5.30   0.000     .1173837    .2553937
+             hs_completion_pp |   .5202066   .0487764    10.67   0.000     .4245604    .6158528
+              some_college_pp |  -.0643434   .0216043    -2.98   0.003    -.1067075   -.0219793
+                              |
+                         year |
+                        2024  |  -.1336131   .1564367    -0.85   0.393    -.4403717    .1731455
+                        2025  |  -.0471571   .1763463    -0.27   0.789    -.3929567    .2986426
+                              |
+                        _cons |   7.835312    6.76961     1.16   0.247    -5.439299    21.10992
+-----------------------------------------------------------------------------------------------
+
+. eststo qseq_sui_all_m2
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Mutually adjusted housing model") ///
+>     adjustment("Model 2: plus socioeconomic") vars($housing_pp)
+
+. 
+. reg suicide_rate $housing_pp $adjust_m3 i.year if qa_sample_sui == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(21, 2503)       =      85.66
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4735
+                                                Root MSE          =      5.631
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0160061   .0578779     0.28   0.782    -.0974875    .1294997
+          pct_overcrowding_pp |   .3197723   .1498298     2.13   0.033     .0259691    .6135754
+      pct_lack_necessities_pp |   .3893307   .2065091     1.89   0.060    -.0156155    .7942768
+              long_commute_pp |   .0181474   .0129892     1.40   0.163    -.0073234    .0436182
+             homeownership_pp |   -.009478   .0255311    -0.37   0.710    -.0595423    .0405863
+                pct_over65_pp |   .5023861   .0558277     9.00   0.000     .3929129    .6118592
+               pct_under18_pp |   .6331245   .0732031     8.65   0.000     .4895796    .7766694
+                pct_female_pp |  -.7265121   .0832965    -8.72   0.000    -.8898493   -.5631749
+                 pct_black_pp |  -.3007712   .0356348    -8.44   0.000     -.370648   -.2308944
+                 pct_white_pp |  -.1586563   .0328771    -4.83   0.000    -.2231254   -.0941872
+              pct_hispanic_pp |  -.1943842   .0342711    -5.67   0.000    -.2615869   -.1271815
+                 pct_rural_pp |   .0268163   .0066755     4.02   0.000     .0137263    .0399063
+                median_income |  -.0000962   .0000132    -7.28   0.000    -.0001221   -.0000703
+              unemployment_pp |  -.3144585   .1051433    -2.99   0.003    -.5206353   -.1082817
+             child_poverty_pp |   .1864127   .0351434     5.30   0.000     .1174996    .2553258
+             hs_completion_pp |   .5546664   .0500058    11.09   0.000     .4566093    .6527234
+              some_college_pp |  -.0466037   .0218347    -2.13   0.033    -.0894197   -.0037877
+                 uninsured_pp |   .2695324   .0332929     8.10   0.000     .2042479     .334817
+            mh_providers_1000 |     .24852   .0855849     2.90   0.004     .0806955    .4163445
+                              |
+                         year |
+                        2024  |   .2002367   .1616386     1.24   0.216    -.1167223    .5171958
+                        2025  |   .4861503   .1861282     2.61   0.009     .1211691    .8511314
+                              |
+                        _cons |  -.7200714   6.797474    -0.11   0.916    -14.04932    12.60918
+-----------------------------------------------------------------------------------------------
+
+. eststo qseq_sui_all_m3
+
+. qa_post_estimates, handle(`seqpost') outcome("Suicide mortality") ///
+>     analysis("Mutually adjusted housing model") ///
+>     adjustment("Model 3: plus health care") vars($housing_pp)
+
+. 
+. esttab ///
+>     qseq_mh_all_m1 qseq_mh_all_m2 qseq_mh_all_m3 ///
+>     qseq_sui_all_m1 qseq_sui_all_m2 qseq_sui_all_m3 ///
+>     using "$output/TableS0F2_Sequential_combined_housing.rtf", replace ///
+>     keep($housing_pp) ///
+>     mtitles("MH M1" "MH M2" "MH M3" "Suicide M1" "Suicide M2" "Suicide M3") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared")) ///
+>     title("Sequential adjustment in mutually adjusted housing models")
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F2_Sequential_combined_housing.rtf not found)
+(output written to {browse  `"/Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F2_S
+> equential_combined_housing.rtf"'})
+
+. 
+. postclose `seqpost'
+
+. 
+. preserve
+
+.     use `seqdata', clear
+
+.     sort outcome analysis_name variable_name adjustment_level
+
+.     format beta standard_error ci_lower ci_upper %12.4f
+
+.     format p_value %9.4f
+
+.     format r_squared %9.3f
+
+.     save "$processed/sequential_adjustment_summary.dta", replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/1.processed_data/sequential_adjustment_summary.dta saved
+
+.     export excel using "$output/TableS0F_Sequential_adjustment_summary.xlsx", ///
+>         firstrow(variables) replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F_Sequential_adjustment_summa
+> ry.xlsx saved
+
+.     export delimited using "$output/TableS0F_Sequential_adjustment_summary.csv", replace
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F_Sequential_adjustment_summary.csv not found)
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0F_Sequential_adjustment_summa
+> ry.csv saved
+
+. restore
+
+. 
+. ********************************************************************************
+. * II-6. COMMON-SAMPLE PATHWAY-PROXY OUTCOME MODELS
+. ********************************************************************************
+. 
+. /*
+> For each pathway proxy, the base and proxy-adjusted model use exactly the same
+> observations. This allows coefficient changes to be attributed to adjustment for
+> the proxy rather than to a changing sample.
+> */
+. 
+. di "================ COMMON-SAMPLE PATHWAY-PROXY MODELS ================"
+================ COMMON-SAMPLE PATHWAY-PROXY MODELS ================
+
+. capture drop qa_mh_food qa_mh_sleep qa_mh_social qa_mh_allpath
+
+. capture drop qa_sui_food qa_sui_sleep qa_sui_social qa_sui_allpath
+
+. 
+. gen byte qa_mh_food = qa_sample_mh & !missing(food_insecurity_pp)
+
+. gen byte qa_mh_sleep = qa_sample_mh & !missing(insufficient_sleep_pp)
+
+. gen byte qa_mh_social = qa_sample_mh & !missing(loneliness_pp, lack_social_support_pp)
+
+. gen byte qa_mh_allpath = qa_sample_mh & ///
+>     !missing(food_insecurity_pp, insufficient_sleep_pp, loneliness_pp, lack_social_support_pp)
+
+. 
+. gen byte qa_sui_food = qa_sample_sui & !missing(food_insecurity_pp)
+
+. gen byte qa_sui_sleep = qa_sample_sui & !missing(insufficient_sleep_pp)
+
+. gen byte qa_sui_social = qa_sample_sui & !missing(loneliness_pp, lack_social_support_pp)
+
+. gen byte qa_sui_allpath = qa_sample_sui & ///
+>     !missing(food_insecurity_pp, insufficient_sleep_pp, loneliness_pp, lack_social_support_pp)
+
+. 
+. foreach s in qa_mh_food qa_mh_sleep qa_mh_social qa_mh_allpath ///
+>              qa_sui_food qa_sui_sleep qa_sui_social qa_sui_allpath {
+  2.     quietly count if `s' == 1
+  3.     di as result "`s': " r(N)
+  4.     tab year if `s' == 1
+  5. }
+qa_mh_food: 8843
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2023 |      2,929       33.12       33.12
+       2024 |      2,955       33.42       66.54
+       2025 |      2,959       33.46      100.00
+------------+-----------------------------------
+      Total |      8,843      100.00
+qa_mh_sleep: 8841
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2023 |      2,929       33.13       33.13
+       2024 |      2,953       33.40       66.53
+       2025 |      2,959       33.47      100.00
+------------+-----------------------------------
+      Total |      8,841      100.00
+qa_mh_social: 2289
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2025 |      2,289      100.00      100.00
+------------+-----------------------------------
+      Total |      2,289      100.00
+qa_mh_allpath: 2289
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2025 |      2,289      100.00      100.00
+------------+-----------------------------------
+      Total |      2,289      100.00
+qa_sui_food: 7249
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2023 |      2,415       33.31       33.31
+       2024 |      2,412       33.27       66.59
+       2025 |      2,422       33.41      100.00
+------------+-----------------------------------
+      Total |      7,249      100.00
+qa_sui_sleep: 7249
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2023 |      2,415       33.31       33.31
+       2024 |      2,412       33.27       66.59
+       2025 |      2,422       33.41      100.00
+------------+-----------------------------------
+      Total |      7,249      100.00
+qa_sui_social: 1868
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2025 |      1,868      100.00      100.00
+------------+-----------------------------------
+      Total |      1,868      100.00
+qa_sui_allpath: 1868
+
+       year |      Freq.     Percent        Cum.
+------------+-----------------------------------
+       2025 |      1,868      100.00      100.00
+------------+-----------------------------------
+      Total |      1,868      100.00
+
+. 
+. tempname pathpost
+
+. tempfile pathdata
+
+. postfile `pathpost' str35 outcome str45 analysis str45 adjustment ///
+>     str40 variable_name str80 variable_label ///
+>     double beta standard_error ci_lower ci_upper p_value ///
+>     long observations double r_squared using `pathdata', replace
+(file /var/folders/w6/b__yj12d4sz89kvtbjc4m61c0000gn/T//S_43912.00000g not found)
+
+. 
+. eststo clear
+
+. 
+. * ---------------- Poor mental health days: food insecurity ----------------
+. reg mental_health $housing_pp $controls_pp i.year if qa_mh_food == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(21, 2977)       =     702.76
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6521
+                                                Root MSE          =     .41055
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0073638   .0029486     2.50   0.013     .0015823    .0131453
+          pct_overcrowding_pp |  -.0043963   .0048601    -0.90   0.366    -.0139257    .0051332
+      pct_lack_necessities_pp |    .002669    .005016     0.53   0.595    -.0071662    .0125041
+              long_commute_pp |   .0067036   .0007793     8.60   0.000     .0051756    .0082317
+             homeownership_pp |   .0037197   .0016248     2.29   0.022     .0005339    .0069056
+                pct_over65_pp |  -.0357838   .0028786   -12.43   0.000     -.041428   -.0301397
+               pct_under18_pp |  -.0393975   .0036684   -10.74   0.000    -.0465903   -.0322047
+                pct_female_pp |   .0649967   .0045812    14.19   0.000     .0560141    .0739793
+                 pct_black_pp |  -.0125572   .0013802    -9.10   0.000    -.0152634   -.0098509
+                 pct_white_pp |   .0006954   .0012553     0.55   0.580    -.0017659    .0031568
+              pct_hispanic_pp |  -.0104974   .0012711    -8.26   0.000    -.0129898    -.008005
+                median_income |  -7.01e-06   8.04e-07    -8.71   0.000    -8.58e-06   -5.43e-06
+              unemployment_pp |   .0452906    .006236     7.26   0.000     .0330633    .0575179
+             child_poverty_pp |   .0192716    .001867    10.32   0.000     .0156108    .0229324
+                 pct_rural_pp |  -.0024604    .000343    -7.17   0.000     -.003133   -.0017878
+             hs_completion_pp |   -.011453   .0024222    -4.73   0.000    -.0162023   -.0067037
+              some_college_pp |  -.0185332   .0010455   -17.73   0.000    -.0205832   -.0164832
+                 uninsured_pp |   .0065134   .0016703     3.90   0.000     .0032383    .0097885
+            mh_providers_1000 |   .0140547   .0040793     3.45   0.001     .0060562    .0220532
+                              |
+                         year |
+                        2024  |    .533859   .0091729    58.20   0.000     .5158731    .5518449
+                        2025  |    1.00353   .0116377    86.23   0.000     .9807115    1.026349
+                              |
+                        _cons |    4.72958   .3453643    13.69   0.000     4.052403    5.406757
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_food_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Food insecurity sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg mental_health $housing_pp food_insecurity_pp $controls_pp i.year ///
+>     if qa_mh_food == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,843
+                                                F(22, 2977)       =     710.69
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6726
+                                                Root MSE          =      .3983
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0044067   .0028245     1.56   0.119    -.0011315    .0099449
+          pct_overcrowding_pp |  -.0034181   .0048649    -0.70   0.482     -.012957    .0061207
+      pct_lack_necessities_pp |   .0009606   .0050335     0.19   0.849    -.0089088      .01083
+              long_commute_pp |   .0057304   .0007544     7.60   0.000     .0042513    .0072096
+             homeownership_pp |   .0050112   .0015193     3.30   0.001     .0020323    .0079901
+           food_insecurity_pp |   .0577688    .003756    15.38   0.000     .0504042    .0651334
+                pct_over65_pp |  -.0291541   .0028215   -10.33   0.000    -.0346863   -.0236219
+               pct_under18_pp |  -.0367478   .0035501   -10.35   0.000    -.0437088   -.0297868
+                pct_female_pp |   .0581885   .0043837    13.27   0.000     .0495931    .0667839
+                 pct_black_pp |  -.0095549   .0014569    -6.56   0.000    -.0124116   -.0066982
+                 pct_white_pp |   -.000104   .0013035    -0.08   0.936    -.0026599    .0024519
+              pct_hispanic_pp |   -.008551   .0013318    -6.42   0.000    -.0111624   -.0059397
+                median_income |  -4.12e-06   7.83e-07    -5.27   0.000    -5.66e-06   -2.59e-06
+              unemployment_pp |   .0109275   .0064131     1.70   0.088     -.001647     .023502
+             child_poverty_pp |    .006774   .0020108     3.37   0.001     .0028314    .0107166
+                 pct_rural_pp |  -.0022598   .0003325    -6.80   0.000    -.0029116   -.0016079
+             hs_completion_pp |  -.0089491   .0023459    -3.81   0.000    -.0135488   -.0043494
+              some_college_pp |  -.0182598   .0010151   -17.99   0.000    -.0202502   -.0162695
+                 uninsured_pp |  -.0036943   .0017522    -2.11   0.035    -.0071299   -.0002587
+            mh_providers_1000 |   .0121458   .0039606     3.07   0.002       .00438    .0199117
+                              |
+                         year |
+                        2024  |   .5265555   .0090242    58.35   0.000     .5088612    .5442497
+                        2025  |   .8024851     .01744    46.01   0.000     .7682894    .8366809
+                              |
+                        _cons |   4.253917    .340394    12.50   0.000     3.586485    4.921348
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_food_adj
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Food insecurity sample") adjustment("Plus food insecurity") ///
+>     vars($housing_pp food_insecurity_pp)
+
+. 
+. esttab qpath_mh_food_base qpath_mh_food_adj ///
+>     using "$output/TableS0G1_MH_common_sample_food.rtf", replace ///
+>     keep($housing_pp food_insecurity_pp) mtitles("Base, same sample" "+ Food insecurity") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G1_MH_common_sample_food.rtf not found)
+(output written to /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G1_MH_common_sa
+> mple_food.rtf)
+
+. 
+. * ---------------- Poor mental health days: insufficient sleep ----------------
+. reg mental_health $housing_pp $controls_pp i.year if qa_mh_sleep == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,841
+                                                F(21, 2977)       =     702.54
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6520
+                                                Root MSE          =     .41058
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0073852   .0029499     2.50   0.012     .0016011    .0131693
+          pct_overcrowding_pp |  -.0044237   .0048643    -0.91   0.363    -.0139615    .0051141
+      pct_lack_necessities_pp |   .0027299   .0050218     0.54   0.587    -.0071166    .0125764
+              long_commute_pp |   .0067131   .0007796     8.61   0.000     .0051845    .0082417
+             homeownership_pp |   .0037305    .001626     2.29   0.022     .0005424    .0069186
+                pct_over65_pp |  -.0357704   .0028786   -12.43   0.000    -.0414146   -.0301263
+               pct_under18_pp |   -.039369   .0036689   -10.73   0.000    -.0465629    -.032175
+                pct_female_pp |   .0649855   .0045834    14.18   0.000     .0559985    .0739725
+                 pct_black_pp |  -.0125546     .00138    -9.10   0.000    -.0152604   -.0098488
+                 pct_white_pp |   .0007005   .0012551     0.56   0.577    -.0017605    .0031615
+              pct_hispanic_pp |  -.0104916   .0012711    -8.25   0.000     -.012984   -.0079992
+                median_income |  -7.02e-06   8.05e-07    -8.72   0.000    -8.59e-06   -5.44e-06
+              unemployment_pp |   .0452958   .0062574     7.24   0.000     .0330265     .057565
+             child_poverty_pp |   .0192716   .0018672    10.32   0.000     .0156106    .0229327
+                 pct_rural_pp |  -.0024653   .0003433    -7.18   0.000    -.0031385   -.0017921
+             hs_completion_pp |  -.0114524   .0024223    -4.73   0.000    -.0162019    -.006703
+              some_college_pp |  -.0185328   .0010461   -17.72   0.000     -.020584   -.0164815
+                 uninsured_pp |   .0065082   .0016719     3.89   0.000     .0032299    .0097864
+            mh_providers_1000 |   .0140661   .0040807     3.45   0.001     .0060648    .0220674
+                              |
+                         year |
+                        2024  |   .5338402   .0091916    58.08   0.000     .5158178    .5518627
+                        2025  |   1.003592   .0116496    86.15   0.000     .9807501    1.026434
+                              |
+                        _cons |   4.728215   .3453505    13.69   0.000     4.051065    5.405365
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_sleep_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Insufficient sleep sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg mental_health $housing_pp insufficient_sleep_pp $controls_pp i.year ///
+>     if qa_mh_sleep == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      8,841
+                                                F(22, 2977)       =     742.49
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.7105
+                                                Root MSE          =     .37452
+
+                                            (Std. err. adjusted for 2,978 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0114647    .002562     4.47   0.000     .0064412    .0164883
+          pct_overcrowding_pp |   .0044978   .0039983     1.12   0.261    -.0033418    .0123375
+      pct_lack_necessities_pp |  -.0003194   .0049437    -0.06   0.948    -.0100128     .009374
+              long_commute_pp |   .0034298   .0006913     4.96   0.000     .0020743    .0047852
+             homeownership_pp |   .0039572   .0013806     2.87   0.004     .0012501    .0066643
+        insufficient_sleep_pp |   .0724872   .0028055    25.84   0.000     .0669862    .0779881
+                pct_over65_pp |  -.0243784    .002665    -9.15   0.000    -.0296038    -.019153
+               pct_under18_pp |  -.0316213   .0032743    -9.66   0.000    -.0380414   -.0252011
+                pct_female_pp |   .0554544   .0038735    14.32   0.000     .0478594    .0630495
+                 pct_black_pp |  -.0145219   .0014268   -10.18   0.000    -.0173195   -.0117243
+                 pct_white_pp |   .0021744   .0013889     1.57   0.118     -.000549    .0048978
+              pct_hispanic_pp |  -.0063277   .0013292    -4.76   0.000    -.0089339   -.0037215
+                median_income |  -4.54e-06   7.43e-07    -6.10   0.000    -5.99e-06   -3.08e-06
+              unemployment_pp |   .0261644   .0053581     4.88   0.000     .0156585    .0366704
+             child_poverty_pp |   .0127263   .0017391     7.32   0.000     .0093163    .0161363
+                 pct_rural_pp |  -.0009943   .0003074    -3.23   0.001     -.001597   -.0003915
+             hs_completion_pp |  -.0060742   .0020273    -3.00   0.003    -.0100493   -.0020991
+              some_college_pp |  -.0110171   .0009304   -11.84   0.000    -.0128413   -.0091928
+                 uninsured_pp |    .007247   .0015256     4.75   0.000     .0042557    .0102383
+            mh_providers_1000 |   .0232571   .0054525     4.27   0.000     .0125661     .033948
+                              |
+                         year |
+                        2024  |   .4821001   .0087261    55.25   0.000     .4649903    .4992099
+                        2025  |   .7312886   .0150547    48.58   0.000       .70177    .7608073
+                              |
+                        _cons |   1.245489   .3263595     3.82   0.000     .6055763    1.885403
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_sleep_adj
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Insufficient sleep sample") adjustment("Plus insufficient sleep") ///
+>     vars($housing_pp insufficient_sleep_pp)
+
+. 
+. esttab qpath_mh_sleep_base qpath_mh_sleep_adj ///
+>     using "$output/TableS0G2_MH_common_sample_sleep.rtf", replace ///
+>     keep($housing_pp insufficient_sleep_pp) mtitles("Base, same sample" "+ Insufficient sleep") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G2_MH_common_sample_sleep.rtf not found)
+(output written to /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G2_MH_common_sa
+> mple_sleep.rtf)
+
+. 
+. * ---------------- Poor mental health days: social proxies ----------------
+. reg mental_health $housing_pp $controls_pp i.year if qa_mh_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      2,289
+                                                F(19, 2288)       =     143.92
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5631
+                                                Root MSE          =     .38313
+
+                                            (Std. err. adjusted for 2,289 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0007852   .0035269    -0.22   0.824    -.0077015    .0061311
+          pct_overcrowding_pp |  -.0140916   .0056045    -2.51   0.012     -.025082   -.0031012
+      pct_lack_necessities_pp |  -.0009283   .0059212    -0.16   0.875    -.0125399    .0106832
+              long_commute_pp |   .0086293   .0009573     9.01   0.000     .0067521    .0105065
+             homeownership_pp |  -.0001884   .0018147    -0.10   0.917     -.003747    .0033702
+                pct_over65_pp |  -.0272424   .0035791    -7.61   0.000     -.034261   -.0202238
+               pct_under18_pp |  -.0353349   .0046077    -7.67   0.000    -.0443706   -.0262992
+                pct_female_pp |   .0564319   .0055821    10.11   0.000     .0454854    .0673783
+                 pct_black_pp |   -.021194   .0017552   -12.08   0.000    -.0246359   -.0177521
+                 pct_white_pp |  -.0065057   .0016881    -3.85   0.000    -.0098161   -.0031954
+              pct_hispanic_pp |  -.0147358   .0016821    -8.76   0.000    -.0180345   -.0114371
+                median_income |  -9.36e-06   1.06e-06    -8.83   0.000    -.0000114   -7.28e-06
+              unemployment_pp |   .0575049   .0085155     6.75   0.000     .0408059    .0742038
+             child_poverty_pp |   .0145206   .0028942     5.02   0.000     .0088451    .0201961
+                 pct_rural_pp |  -.0033182   .0004213    -7.88   0.000    -.0041444   -.0024921
+             hs_completion_pp |   .0024413   .0031195     0.78   0.434    -.0036762    .0085587
+              some_college_pp |  -.0216755    .001287   -16.84   0.000    -.0241993   -.0191518
+                 uninsured_pp |   .0140868    .002291     6.15   0.000     .0095942    .0185794
+            mh_providers_1000 |   .0037075   .0048237     0.77   0.442    -.0057519    .0131668
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   6.014986    .462922    12.99   0.000     5.107195    6.922777
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_social_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Social proxy sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg mental_health $housing_pp loneliness_pp $controls_pp i.year ///
+>     if qa_mh_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      2,289
+                                                F(20, 2288)       =     173.54
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6028
+                                                Root MSE          =     .36541
+
+                                            (Std. err. adjusted for 2,289 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0008735   .0033833     0.26   0.796    -.0057612    .0075083
+          pct_overcrowding_pp |  -.0088259   .0052281    -1.69   0.092    -.0190783    .0014265
+      pct_lack_necessities_pp |  -.0074968   .0056595    -1.32   0.185    -.0185951    .0036015
+              long_commute_pp |   .0080957   .0008999     9.00   0.000      .006331    .0098604
+             homeownership_pp |   .0010228   .0017122     0.60   0.550    -.0023347    .0043804
+                loneliness_pp |   .0604306    .004094    14.76   0.000     .0524024    .0684589
+                pct_over65_pp |  -.0257604   .0032482    -7.93   0.000    -.0321301   -.0193907
+               pct_under18_pp |  -.0320116   .0043758    -7.32   0.000    -.0405926   -.0234306
+                pct_female_pp |    .050567    .005278     9.58   0.000     .0402168    .0609172
+                 pct_black_pp |  -.0173378   .0017575    -9.86   0.000    -.0207843   -.0138913
+                 pct_white_pp |  -.0015649    .001695    -0.92   0.356    -.0048888    .0017589
+              pct_hispanic_pp |  -.0136269   .0016328    -8.35   0.000    -.0168288   -.0104251
+                median_income |  -8.49e-06   9.73e-07    -8.72   0.000    -.0000104   -6.58e-06
+              unemployment_pp |   .0556824   .0081901     6.80   0.000     .0396216    .0717432
+             child_poverty_pp |   .0118777   .0026633     4.46   0.000     .0066549    .0171005
+                 pct_rural_pp |  -.0037799   .0004016    -9.41   0.000    -.0045674   -.0029924
+             hs_completion_pp |   .0024163   .0029836     0.81   0.418    -.0034345     .008267
+              some_college_pp |  -.0186801   .0012652   -14.76   0.000    -.0211612   -.0161989
+                 uninsured_pp |   .0158495   .0022178     7.15   0.000     .0115004    .0201985
+            mh_providers_1000 |  -.0025981   .0042198    -0.62   0.538    -.0108732    .0056769
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   3.476042   .4719662     7.37   0.000     2.550516    4.401568
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_lonely
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Social proxy sample") adjustment("Plus loneliness") ///
+>     vars($housing_pp loneliness_pp)
+
+. 
+. reg mental_health $housing_pp lack_social_support_pp $controls_pp i.year ///
+>     if qa_mh_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      2,289
+                                                F(20, 2288)       =     152.38
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5960
+                                                Root MSE          =      .3685
+
+                                            (Std. err. adjusted for 2,289 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0015934   .0034217    -0.47   0.641    -.0083035    .0051166
+          pct_overcrowding_pp |  -.0177867   .0054891    -3.24   0.001    -.0285509   -.0070225
+      pct_lack_necessities_pp |   -.004287   .0057539    -0.75   0.456    -.0155704    .0069964
+              long_commute_pp |   .0078187   .0009242     8.46   0.000     .0060064    .0096311
+             homeownership_pp |    .000795   .0017737     0.45   0.654    -.0026832    .0042732
+       lack_social_support_pp |   .0492019   .0037291    13.19   0.000     .0418892    .0565146
+                pct_over65_pp |  -.0256494   .0034306    -7.48   0.000    -.0323768   -.0189221
+               pct_under18_pp |  -.0309174   .0045474    -6.80   0.000    -.0398348       -.022
+                pct_female_pp |   .0565081   .0054294    10.41   0.000      .045861    .0671552
+                 pct_black_pp |  -.0246756   .0017402   -14.18   0.000    -.0280881   -.0212632
+                 pct_white_pp |  -.0031973   .0016344    -1.96   0.051    -.0064024    7.78e-06
+              pct_hispanic_pp |  -.0141492   .0016164    -8.75   0.000    -.0173189   -.0109795
+                median_income |  -.0000103   1.06e-06    -9.66   0.000    -.0000123   -8.18e-06
+              unemployment_pp |   .0436557   .0082107     5.32   0.000     .0275546    .0597569
+             child_poverty_pp |   .0136501   .0027457     4.97   0.000     .0082658    .0190344
+                 pct_rural_pp |  -.0035875   .0004087    -8.78   0.000    -.0043889    -.002786
+             hs_completion_pp |   .0075064   .0030992     2.42   0.016     .0014289    .0135838
+              some_college_pp |  -.0184664   .0013009   -14.20   0.000    -.0210175   -.0159154
+                 uninsured_pp |   .0104573    .002251     4.65   0.000     .0060431    .0148715
+            mh_providers_1000 |   .0065023   .0050065     1.30   0.194    -.0033155    .0163201
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   3.910872   .4869115     8.03   0.000     2.956038    4.865706
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_support
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Social proxy sample") adjustment("Plus lack social support") ///
+>     vars($housing_pp lack_social_support_pp)
+
+. 
+. reg mental_health $housing_pp loneliness_pp lack_social_support_pp $controls_pp i.year ///
+>     if qa_mh_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      2,289
+                                                F(21, 2288)       =     166.49
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6086
+                                                Root MSE          =      .3628
+
+                                            (Std. err. adjusted for 2,289 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0000388   .0033694    -0.01   0.991    -.0066462    .0065686
+          pct_overcrowding_pp |  -.0123198   .0053083    -2.32   0.020    -.0227294   -.0019102
+      pct_lack_necessities_pp |  -.0073553   .0055896    -1.32   0.188    -.0183166    .0036059
+              long_commute_pp |   .0078226   .0008961     8.73   0.000     .0060654    .0095799
+             homeownership_pp |   .0011894   .0017165     0.69   0.488    -.0021766    .0045555
+                loneliness_pp |   .0427758   .0051288     8.34   0.000     .0327182    .0528334
+       lack_social_support_pp |   .0260392   .0046145     5.64   0.000     .0169901    .0350883
+                pct_over65_pp |  -.0253503   .0032666    -7.76   0.000    -.0317561   -.0189445
+               pct_under18_pp |  -.0306446   .0043966    -6.97   0.000    -.0392664   -.0220228
+                pct_female_pp |   .0523208   .0053008     9.87   0.000     .0419258    .0627157
+                 pct_black_pp |   -.020307   .0018829   -10.79   0.000    -.0239993   -.0166147
+                 pct_white_pp |  -.0012575   .0016513    -0.76   0.446    -.0044958    .0019808
+              pct_hispanic_pp |  -.0136404   .0015952    -8.55   0.000    -.0167687   -.0105122
+                median_income |  -9.22e-06   1.02e-06    -9.06   0.000    -.0000112   -7.23e-06
+              unemployment_pp |   .0488854   .0081554     5.99   0.000     .0328927    .0648782
+             child_poverty_pp |   .0121891   .0026478     4.60   0.000     .0069968    .0173814
+                 pct_rural_pp |  -.0037875   .0004007    -9.45   0.000    -.0045732   -.0030018
+             hs_completion_pp |   .0051042    .003005     1.70   0.090    -.0007886     .010997
+              some_college_pp |  -.0178568   .0012824   -13.92   0.000    -.0203716   -.0153421
+                 uninsured_pp |   .0134136   .0021902     6.12   0.000     .0091186    .0177087
+            mh_providers_1000 |   .0007232   .0045053     0.16   0.872    -.0081118    .0095581
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   3.104235   .4773311     6.50   0.000     2.168188    4.040281
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_social_both
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("Social proxy sample") adjustment("Plus both social proxies") ///
+>     vars($housing_pp loneliness_pp lack_social_support_pp)
+
+. 
+. esttab qpath_mh_social_base qpath_mh_lonely ///
+>     qpath_mh_support qpath_mh_social_both ///
+>     using "$output/TableS0G3_MH_common_sample_social.rtf", replace ///
+>     keep($housing_pp loneliness_pp lack_social_support_pp) ///
+>     mtitles("Base, same sample" "+ Loneliness" "+ Lack support" "+ Both") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G3_MH_common_sample_social.rtf not found)
+(output written to /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G3_MH_common_sa
+> mple_social.rtf)
+
+. 
+. * ---------------- Poor mental health days: all proxies ----------------
+. reg mental_health $housing_pp $controls_pp i.year if qa_mh_allpath == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      2,289
+                                                F(19, 2288)       =     143.92
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5631
+                                                Root MSE          =     .38313
+
+                                            (Std. err. adjusted for 2,289 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0007852   .0035269    -0.22   0.824    -.0077015    .0061311
+          pct_overcrowding_pp |  -.0140916   .0056045    -2.51   0.012     -.025082   -.0031012
+      pct_lack_necessities_pp |  -.0009283   .0059212    -0.16   0.875    -.0125399    .0106832
+              long_commute_pp |   .0086293   .0009573     9.01   0.000     .0067521    .0105065
+             homeownership_pp |  -.0001884   .0018147    -0.10   0.917     -.003747    .0033702
+                pct_over65_pp |  -.0272424   .0035791    -7.61   0.000     -.034261   -.0202238
+               pct_under18_pp |  -.0353349   .0046077    -7.67   0.000    -.0443706   -.0262992
+                pct_female_pp |   .0564319   .0055821    10.11   0.000     .0454854    .0673783
+                 pct_black_pp |   -.021194   .0017552   -12.08   0.000    -.0246359   -.0177521
+                 pct_white_pp |  -.0065057   .0016881    -3.85   0.000    -.0098161   -.0031954
+              pct_hispanic_pp |  -.0147358   .0016821    -8.76   0.000    -.0180345   -.0114371
+                median_income |  -9.36e-06   1.06e-06    -8.83   0.000    -.0000114   -7.28e-06
+              unemployment_pp |   .0575049   .0085155     6.75   0.000     .0408059    .0742038
+             child_poverty_pp |   .0145206   .0028942     5.02   0.000     .0088451    .0201961
+                 pct_rural_pp |  -.0033182   .0004213    -7.88   0.000    -.0041444   -.0024921
+             hs_completion_pp |   .0024413   .0031195     0.78   0.434    -.0036762    .0085587
+              some_college_pp |  -.0216755    .001287   -16.84   0.000    -.0241993   -.0191518
+                 uninsured_pp |   .0140868    .002291     6.15   0.000     .0095942    .0185794
+            mh_providers_1000 |   .0037075   .0048237     0.77   0.442    -.0057519    .0131668
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   6.014986    .462922    12.99   0.000     5.107195    6.922777
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_all_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("All pathway proxies sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg mental_health $housing_pp food_insecurity_pp insufficient_sleep_pp ///
+>     loneliness_pp lack_social_support_pp $controls_pp i.year ///
+>     if qa_mh_allpath == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      2,289
+                                                F(23, 2288)       =     184.95
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6577
+                                                Root MSE          =     .33945
+
+                                            (Std. err. adjusted for 2,289 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                mental_health | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0043261   .0030262     1.43   0.153    -.0016083    .0102605
+          pct_overcrowding_pp |  -.0056435   .0048695    -1.16   0.247    -.0151926    .0039056
+      pct_lack_necessities_pp |  -.0110897   .0053812    -2.06   0.039    -.0216422   -.0005373
+              long_commute_pp |   .0051633    .000874     5.91   0.000     .0034493    .0068772
+             homeownership_pp |   .0022332   .0016426     1.36   0.174     -.000988    .0054543
+           food_insecurity_pp |   .0007929   .0047729     0.17   0.868    -.0085669    .0101526
+        insufficient_sleep_pp |   .0506141   .0032926    15.37   0.000     .0441572    .0570709
+                loneliness_pp |   .0412955   .0049119     8.41   0.000     .0316632    .0509278
+       lack_social_support_pp |   .0189753   .0042654     4.45   0.000     .0106108    .0273398
+                pct_over65_pp |  -.0155202   .0032272    -4.81   0.000    -.0218487   -.0091918
+               pct_under18_pp |  -.0274009    .004327    -6.33   0.000    -.0358862   -.0189157
+                pct_female_pp |   .0483756   .0049598     9.75   0.000     .0386495    .0581017
+                 pct_black_pp |  -.0210316   .0018762   -11.21   0.000    -.0247109   -.0173523
+                 pct_white_pp |  -.0017814   .0016671    -1.07   0.285    -.0050506    .0014877
+              pct_hispanic_pp |  -.0119356   .0015868    -7.52   0.000    -.0150474   -.0088238
+                median_income |  -7.37e-06   1.02e-06    -7.20   0.000    -9.37e-06   -5.36e-06
+              unemployment_pp |   .0316627   .0076837     4.12   0.000      .016595    .0467305
+             child_poverty_pp |    .005501   .0026918     2.04   0.041     .0002224    .0107797
+                 pct_rural_pp |  -.0026235   .0003853    -6.81   0.000    -.0033791   -.0018678
+             hs_completion_pp |   .0043756   .0028266     1.55   0.122    -.0011673    .0099185
+              some_college_pp |  -.0126554   .0012209   -10.37   0.000    -.0150495   -.0102612
+                 uninsured_pp |   .0100331    .002267     4.43   0.000     .0055875    .0144788
+            mh_providers_1000 |   .0048674   .0057164     0.85   0.395    -.0063425    .0160773
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   1.118659   .4591488     2.44   0.015     .2182672     2.01905
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_mh_all_adj
+
+. qa_post_estimates, handle(`pathpost') outcome("Poor mental health days") ///
+>     analysis("All pathway proxies sample") adjustment("Plus all pathway proxies") ///
+>     vars($housing_pp food_insecurity_pp insufficient_sleep_pp loneliness_pp lack_social_support_pp)
+
+. 
+. esttab qpath_mh_all_base qpath_mh_all_adj ///
+>     using "$output/TableS0G4_MH_common_sample_all_proxies.rtf", replace ///
+>     keep($housing_pp food_insecurity_pp insufficient_sleep_pp loneliness_pp lack_social_support_pp) ///
+>     mtitles("Base, same sample" "+ All proxies") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G4_MH_common_sample_all_proxies.rtf not found)
+(output written to {browse  `"/Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G4_M
+> H_common_sample_all_proxies.rtf"'})
+
+. 
+. * ---------------- Suicide mortality: food and sleep proxies ----------------
+. reg suicide_rate $housing_pp $controls_pp i.year if qa_sui_food == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(21, 2503)       =      85.66
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4735
+                                                Root MSE          =      5.631
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0160061   .0578779     0.28   0.782    -.0974875    .1294997
+          pct_overcrowding_pp |   .3197723   .1498298     2.13   0.033     .0259691    .6135754
+      pct_lack_necessities_pp |   .3893307   .2065091     1.89   0.060    -.0156155    .7942768
+              long_commute_pp |   .0181474   .0129892     1.40   0.163    -.0073234    .0436182
+             homeownership_pp |   -.009478   .0255311    -0.37   0.710    -.0595423    .0405863
+                pct_over65_pp |   .5023861   .0558277     9.00   0.000     .3929129    .6118592
+               pct_under18_pp |   .6331245   .0732031     8.65   0.000     .4895796    .7766694
+                pct_female_pp |  -.7265121   .0832965    -8.72   0.000    -.8898493   -.5631749
+                 pct_black_pp |  -.3007712   .0356348    -8.44   0.000     -.370648   -.2308944
+                 pct_white_pp |  -.1586563   .0328771    -4.83   0.000    -.2231254   -.0941872
+              pct_hispanic_pp |  -.1943842   .0342711    -5.67   0.000    -.2615869   -.1271815
+                median_income |  -.0000962   .0000132    -7.28   0.000    -.0001221   -.0000703
+              unemployment_pp |  -.3144585   .1051433    -2.99   0.003    -.5206353   -.1082817
+             child_poverty_pp |   .1864127   .0351434     5.30   0.000     .1174996    .2553258
+                 pct_rural_pp |   .0268163   .0066755     4.02   0.000     .0137263    .0399063
+             hs_completion_pp |   .5546664   .0500058    11.09   0.000     .4566093    .6527234
+              some_college_pp |  -.0466037   .0218347    -2.13   0.033    -.0894197   -.0037877
+                 uninsured_pp |   .2695324   .0332929     8.10   0.000     .2042479     .334817
+            mh_providers_1000 |     .24852   .0855849     2.90   0.004     .0806955    .4163445
+                              |
+                         year |
+                        2024  |   .2002367   .1616386     1.24   0.216    -.1167223    .5171958
+                        2025  |   .4861503   .1861282     2.61   0.009     .1211691    .8511314
+                              |
+                        _cons |  -.7200714   6.797474    -0.11   0.916    -14.04932    12.60918
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_food_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Food insecurity sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg suicide_rate $housing_pp food_insecurity_pp $controls_pp i.year ///
+>     if qa_sui_food == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(22, 2503)       =      82.91
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4760
+                                                Root MSE          =     5.6179
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0088146   .0577484     0.15   0.879    -.1044248    .1220541
+          pct_overcrowding_pp |   .3277206   .1497869     2.19   0.029     .0340017    .6214395
+      pct_lack_necessities_pp |   .3826777   .2045161     1.87   0.061    -.0183603    .7837158
+              long_commute_pp |   .0148536   .0130239     1.14   0.254    -.0106852    .0403924
+             homeownership_pp |  -.0051426   .0254276    -0.20   0.840    -.0550039    .0447186
+           food_insecurity_pp |   .2455332   .0652079     3.77   0.000     .1176663    .3734002
+                pct_over65_pp |    .527931   .0565043     9.34   0.000     .4171311     .638731
+               pct_under18_pp |   .6436034   .0730415     8.81   0.000     .5003753    .7868314
+                pct_female_pp |  -.7525502   .0837148    -8.99   0.000    -.9167075   -.5883928
+                 pct_black_pp |  -.2863388   .0360107    -7.95   0.000    -.3569527   -.2157249
+                 pct_white_pp |  -.1605619   .0328666    -4.89   0.000    -.2250103   -.0961135
+              pct_hispanic_pp |   -.183513    .034489    -5.32   0.000    -.2511429    -.115883
+                median_income |   -.000085   .0000135    -6.28   0.000    -.0001116   -.0000584
+              unemployment_pp |  -.4538638   .1079782    -4.20   0.000    -.6655995   -.2421282
+             child_poverty_pp |   .1295677   .0383443     3.38   0.001     .0543779    .2047575
+                 pct_rural_pp |   .0273609   .0066521     4.11   0.000     .0143167    .0404051
+             hs_completion_pp |   .5707645   .0495818    11.51   0.000     .4735389      .66799
+              some_college_pp |  -.0490323   .0218071    -2.25   0.025    -.0917941   -.0062705
+                 uninsured_pp |    .223204   .0363981     6.13   0.000     .1518307    .2945774
+            mh_providers_1000 |   .2397319   .0850996     2.82   0.005      .072859    .4066047
+                              |
+                         year |
+                        2024  |   .1687938    .160527     1.05   0.293    -.1459855     .483573
+                        2025  |  -.3546447   .2791712    -1.27   0.204    -.9020749    .1927855
+                              |
+                        _cons |  -3.113318   6.802744    -0.46   0.647     -16.4529    10.22626
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_food_adj
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Food insecurity sample") adjustment("Plus food insecurity") ///
+>     vars($housing_pp food_insecurity_pp)
+
+. 
+. reg suicide_rate $housing_pp $controls_pp i.year if qa_sui_sleep == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(21, 2503)       =      85.66
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4735
+                                                Root MSE          =      5.631
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0160061   .0578779     0.28   0.782    -.0974875    .1294997
+          pct_overcrowding_pp |   .3197723   .1498298     2.13   0.033     .0259691    .6135754
+      pct_lack_necessities_pp |   .3893307   .2065091     1.89   0.060    -.0156155    .7942768
+              long_commute_pp |   .0181474   .0129892     1.40   0.163    -.0073234    .0436182
+             homeownership_pp |   -.009478   .0255311    -0.37   0.710    -.0595423    .0405863
+                pct_over65_pp |   .5023861   .0558277     9.00   0.000     .3929129    .6118592
+               pct_under18_pp |   .6331245   .0732031     8.65   0.000     .4895796    .7766694
+                pct_female_pp |  -.7265121   .0832965    -8.72   0.000    -.8898493   -.5631749
+                 pct_black_pp |  -.3007712   .0356348    -8.44   0.000     -.370648   -.2308944
+                 pct_white_pp |  -.1586563   .0328771    -4.83   0.000    -.2231254   -.0941872
+              pct_hispanic_pp |  -.1943842   .0342711    -5.67   0.000    -.2615869   -.1271815
+                median_income |  -.0000962   .0000132    -7.28   0.000    -.0001221   -.0000703
+              unemployment_pp |  -.3144585   .1051433    -2.99   0.003    -.5206353   -.1082817
+             child_poverty_pp |   .1864127   .0351434     5.30   0.000     .1174996    .2553258
+                 pct_rural_pp |   .0268163   .0066755     4.02   0.000     .0137263    .0399063
+             hs_completion_pp |   .5546664   .0500058    11.09   0.000     .4566093    .6527234
+              some_college_pp |  -.0466037   .0218347    -2.13   0.033    -.0894197   -.0037877
+                 uninsured_pp |   .2695324   .0332929     8.10   0.000     .2042479     .334817
+            mh_providers_1000 |     .24852   .0855849     2.90   0.004     .0806955    .4163445
+                              |
+                         year |
+                        2024  |   .2002367   .1616386     1.24   0.216    -.1167223    .5171958
+                        2025  |   .4861503   .1861282     2.61   0.009     .1211691    .8511314
+                              |
+                        _cons |  -.7200714   6.797474    -0.11   0.916    -14.04932    12.60918
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_sleep_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Insufficient sleep sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg suicide_rate $housing_pp insufficient_sleep_pp $controls_pp i.year ///
+>     if qa_sui_sleep == 1, vce(cluster fipscode)
+
+Linear regression                               Number of obs     =      7,249
+                                                F(22, 2503)       =      82.52
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.4737
+                                                Root MSE          =     5.6306
+
+                                            (Std. err. adjusted for 2,504 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0139986   .0575056     0.24   0.808    -.0987648    .1267619
+          pct_overcrowding_pp |   .3140823   .1507347     2.08   0.037     .0185048    .6096598
+      pct_lack_necessities_pp |   .3922301   .2064823     1.90   0.058    -.0126636    .7971238
+              long_commute_pp |    .020306   .0134718     1.51   0.132    -.0061109    .0467229
+             homeownership_pp |  -.0096485   .0255424    -0.38   0.706    -.0597349    .0404379
+        insufficient_sleep_pp |  -.0419233   .0435596    -0.96   0.336    -.1273398    .0434931
+                pct_over65_pp |   .4954471   .0564257     8.78   0.000     .3848011     .606093
+               pct_under18_pp |   .6295858   .0730933     8.61   0.000     .4862562    .7729154
+                pct_female_pp |  -.7201877   .0832507    -8.65   0.000    -.8834349   -.5569404
+                 pct_black_pp |  -.2996933   .0353711    -8.47   0.000     -.369053   -.2303336
+                 pct_white_pp |  -.1595068   .0328313    -4.86   0.000     -.223886   -.0951275
+              pct_hispanic_pp |   -.196954   .0343551    -5.73   0.000    -.2643213   -.1295866
+                median_income |  -.0000977   .0000134    -7.30   0.000     -.000124   -.0000715
+              unemployment_pp |  -.3022583   .1049095    -2.88   0.004    -.5079765     -.09654
+             child_poverty_pp |   .1901497   .0358496     5.30   0.000     .1198517    .2604476
+                 pct_rural_pp |   .0258237   .0067084     3.85   0.000     .0126692    .0389782
+             hs_completion_pp |   .5525843   .0497645    11.10   0.000     .4550004    .6501681
+              some_college_pp |  -.0517339   .0224462    -2.30   0.021     -.095749   -.0077189
+                 uninsured_pp |   .2681364     .03322     8.07   0.000     .2029949    .3332779
+            mh_providers_1000 |   .2420565   .0854436     2.83   0.005     .0745091    .4096038
+                              |
+                         year |
+                        2024  |   .2330536   .1614534     1.44   0.149    -.0835423    .5496495
+                        2025  |   .6448034   .2376807     2.71   0.007     .1787324    1.110874
+                              |
+                        _cons |    1.21207   7.026138     0.17   0.863    -12.56557    14.98971
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_sleep_adj
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Insufficient sleep sample") adjustment("Plus insufficient sleep") ///
+>     vars($housing_pp insufficient_sleep_pp)
+
+. 
+. esttab qpath_sui_food_base qpath_sui_food_adj ///
+>     qpath_sui_sleep_base qpath_sui_sleep_adj ///
+>     using "$output/TableS0G5_Suicide_common_sample_food_sleep.rtf", replace ///
+>     keep($housing_pp food_insecurity_pp insufficient_sleep_pp) ///
+>     mtitles("Food base" "+ Food" "Sleep base" "+ Sleep") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G5_Suicide_common_sample_food_sleep.rtf not found)
+(output written to {browse  `"/Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G5_S
+> uicide_common_sample_food_sleep.rtf"'})
+
+. 
+. * ---------------- Suicide mortality: social and all proxies ----------------
+. reg suicide_rate $housing_pp $controls_pp i.year if qa_sui_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      1,868
+                                                F(19, 1867)       =      76.65
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5266
+                                                Root MSE          =     5.3239
+
+                                            (Std. err. adjusted for 1,868 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0160341   .0673352    -0.24   0.812    -.1480942    .1160261
+          pct_overcrowding_pp |   .3854973   .2005916     1.92   0.055    -.0079101    .7789048
+      pct_lack_necessities_pp |   .4321701   .2151525     2.01   0.045     .0102053    .8541349
+              long_commute_pp |  -.0046398   .0170821    -0.27   0.786    -.0381418    .0288623
+             homeownership_pp |   .0271775   .0364026     0.75   0.455    -.0442166    .0985716
+                pct_over65_pp |   .3985052   .0634154     6.28   0.000     .2741327    .5228776
+               pct_under18_pp |   .5033995   .0789516     6.38   0.000     .3485568    .6582422
+                pct_female_pp |  -.6388277    .107544    -5.94   0.000    -.8497468   -.4279086
+                 pct_black_pp |  -.3151575   .0347722    -9.06   0.000    -.3833539    -.246961
+                 pct_white_pp |  -.1824481   .0334484    -5.45   0.000    -.2480483   -.1168478
+              pct_hispanic_pp |  -.2429632   .0347855    -6.98   0.000    -.3111857   -.1747407
+                median_income |  -.0001056   .0000174    -6.06   0.000    -.0001398   -.0000714
+              unemployment_pp |  -.0175049   .1512465    -0.12   0.908    -.3141349    .2791252
+             child_poverty_pp |   .0930422   .0479879     1.94   0.053    -.0010734    .1871579
+                 pct_rural_pp |   .0184894   .0083721     2.21   0.027     .0020697    .0349091
+             hs_completion_pp |   .5478604   .0645808     8.48   0.000     .4212021    .6745186
+              some_college_pp |  -.0864047   .0271118    -3.19   0.001    -.1395773   -.0332321
+                 uninsured_pp |   .3122261   .0433158     7.21   0.000     .2272736    .3971786
+            mh_providers_1000 |   .1432611   .0827319     1.73   0.084    -.0189957    .3055178
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   5.308498   9.158859     0.58   0.562    -12.65418    23.27118
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_social_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Social proxy sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg suicide_rate $housing_pp loneliness_pp $controls_pp i.year ///
+>     if qa_sui_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      1,868
+                                                F(20, 1867)       =      73.82
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5271
+                                                Root MSE          =     5.3223
+
+                                            (Std. err. adjusted for 1,868 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0125939   .0670589    -0.19   0.851    -.1441121    .1189243
+          pct_overcrowding_pp |   .3969994   .2019292     1.97   0.049     .0009687    .7930301
+      pct_lack_necessities_pp |   .4210292   .2151059     1.96   0.050    -.0008442    .8429025
+              long_commute_pp |  -.0052605   .0171039    -0.31   0.758    -.0388054    .0282843
+             homeownership_pp |   .0289214    .036409     0.79   0.427    -.0424853    .1003281
+                loneliness_pp |   .0914636   .0633041     1.44   0.149    -.0326908    .2156179
+                pct_over65_pp |   .4032501   .0632962     6.37   0.000     .2791113    .5273888
+               pct_under18_pp |   .5111635   .0788732     6.48   0.000     .3564746    .6658523
+                pct_female_pp |  -.6499392   .1082223    -6.01   0.000    -.8621886   -.4376898
+                 pct_black_pp |  -.3087246   .0354744    -8.70   0.000    -.3782983   -.2391508
+                 pct_white_pp |  -.1745199   .0342752    -5.09   0.000    -.2417415   -.1072982
+              pct_hispanic_pp |  -.2415898   .0349142    -6.92   0.000    -.3100648   -.1731149
+                median_income |  -.0001044   .0000174    -5.99   0.000    -.0001386   -.0000702
+              unemployment_pp |  -.0226192   .1512907    -0.15   0.881    -.3193359    .2740976
+             child_poverty_pp |   .0883563   .0478781     1.85   0.065     -.005544    .1822566
+                 pct_rural_pp |   .0178592   .0084051     2.12   0.034     .0013748    .0343436
+             hs_completion_pp |   .5458513    .064653     8.44   0.000     .4190515    .6726512
+              some_college_pp |  -.0803311   .0273678    -2.94   0.003    -.1340058   -.0266564
+                 uninsured_pp |   .3152534   .0431969     7.30   0.000      .230534    .3999727
+            mh_providers_1000 |   .1342628   .0824518     1.63   0.104    -.0274445    .2959701
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |    1.51951   9.461369     0.16   0.872    -17.03646    20.07548
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_lonely
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Social proxy sample") adjustment("Plus loneliness") ///
+>     vars($housing_pp loneliness_pp)
+
+. 
+. reg suicide_rate $housing_pp lack_social_support_pp $controls_pp i.year ///
+>     if qa_sui_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      1,868
+                                                F(20, 1867)       =      73.12
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5268
+                                                Root MSE          =     5.3239
+
+                                            (Std. err. adjusted for 1,868 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0135076   .0677037    -0.20   0.842    -.1462905    .1192754
+          pct_overcrowding_pp |    .388356   .2004028     1.94   0.053    -.0046811    .7813932
+      pct_lack_necessities_pp |   .4377726   .2164887     2.02   0.043     .0131872     .862358
+              long_commute_pp |  -.0039845   .0171065    -0.23   0.816    -.0375345    .0295654
+             homeownership_pp |   .0261478   .0363544     0.72   0.472    -.0451517    .0974473
+       lack_social_support_pp |  -.0570809   .0549772    -1.04   0.299     -.164904    .0507422
+                pct_over65_pp |    .396027   .0635428     6.23   0.000     .2714045    .5206495
+               pct_under18_pp |   .4981422   .0786942     6.33   0.000     .3438042    .6524801
+                pct_female_pp |  -.6370827   .1077501    -5.91   0.000    -.8484059   -.4257595
+                 pct_black_pp |  -.3112007   .0352183    -8.84   0.000    -.3802721   -.2421293
+                 pct_white_pp |  -.1863037   .0334133    -5.58   0.000    -.2518349   -.1207724
+              pct_hispanic_pp |  -.2437164   .0347992    -7.00   0.000    -.3119658   -.1754671
+                median_income |  -.0001044   .0000175    -5.98   0.000    -.0001386   -.0000701
+              unemployment_pp |  -.0003947   .1541374    -0.00   0.998    -.3026944     .301905
+             child_poverty_pp |   .0933455    .048132     1.94   0.053    -.0010527    .1877437
+                 pct_rural_pp |   .0187512    .008372     2.24   0.025     .0023318    .0351707
+             hs_completion_pp |   .5419042   .0645209     8.40   0.000     .4153635    .6684448
+              some_college_pp |  -.0914888   .0279648    -3.27   0.001    -.1463343   -.0366433
+                 uninsured_pp |   .3151432    .043179     7.30   0.000      .230459    .3998275
+            mh_providers_1000 |    .138511   .0829391     1.67   0.095    -.0241522    .3011742
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   7.765208   9.215106     0.84   0.400    -10.30778     25.8382
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_support
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Social proxy sample") adjustment("Plus lack social support") ///
+>     vars($housing_pp lack_social_support_pp)
+
+. 
+. reg suicide_rate $housing_pp loneliness_pp lack_social_support_pp $controls_pp i.year ///
+>     if qa_sui_social == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      1,868
+                                                F(21, 1867)       =      71.35
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5285
+                                                Root MSE          =     5.3157
+
+                                            (Std. err. adjusted for 1,868 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0007787   .0675668    -0.01   0.991    -.1332931    .1317357
+          pct_overcrowding_pp |   .4198805   .2029603     2.07   0.039     .0218275    .8179334
+      pct_lack_necessities_pp |   .4237672   .2162901     1.96   0.050    -.0004286    .8479629
+              long_commute_pp |  -.0040875   .0171096    -0.24   0.811    -.0376435    .0294686
+             homeownership_pp |   .0280386   .0363492     0.77   0.441    -.0432507    .0993279
+                loneliness_pp |   .2057956   .0869639     2.37   0.018      .035239    .3763522
+       lack_social_support_pp |   -.169786   .0756791    -2.24   0.025    -.3182105   -.0213615
+                pct_over65_pp |   .4018101    .063035     6.37   0.000     .2781837    .5254365
+               pct_under18_pp |   .5052309   .0786557     6.42   0.000     .3509686    .6594933
+                pct_female_pp |  -.6586385   .1089984    -6.04   0.000    -.8724101    -.444867
+                 pct_black_pp |   -.288914   .0378514    -7.63   0.000    -.3631496   -.2146784
+                 pct_white_pp |  -.1760779   .0343819    -5.12   0.000    -.2435088   -.1086469
+              pct_hispanic_pp |  -.2421136   .0350026    -6.92   0.000    -.3107619   -.1734652
+                median_income |  -.0000992   .0000175    -5.66   0.000    -.0001336   -.0000649
+              unemployment_pp |   .0218817   .1545986     0.14   0.887    -.2813227     .325086
+             child_poverty_pp |   .0834008   .0482335     1.73   0.084    -.0111965    .1779982
+                 pct_rural_pp |   .0178503   .0083961     2.13   0.034     .0013835     .034317
+             hs_completion_pp |   .5256234   .0649642     8.09   0.000     .3982133    .6530335
+              some_college_pp |  -.0878613   .0278943    -3.15   0.002    -.1425686    -.033154
+                 uninsured_pp |   .3277144   .0428006     7.66   0.000     .2437724    .4116565
+            mh_providers_1000 |   .1088857   .0829696     1.31   0.190    -.0538373    .2716087
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   4.090604   9.382607     0.44   0.663     -14.3109    22.49211
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_social_both
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("Social proxy sample") adjustment("Plus both social proxies") ///
+>     vars($housing_pp loneliness_pp lack_social_support_pp)
+
+. 
+. esttab qpath_sui_social_base qpath_sui_lonely ///
+>     qpath_sui_support qpath_sui_social_both ///
+>     using "$output/TableS0G6_Suicide_common_sample_social.rtf", replace ///
+>     keep($housing_pp loneliness_pp lack_social_support_pp) ///
+>     mtitles("Base, same sample" "+ Loneliness" "+ Lack support" "+ Both") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G6_Suicide_common_sample_social.rtf not found)
+(output written to {browse  `"/Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G6_S
+> uicide_common_sample_social.rtf"'})
+
+. 
+. reg suicide_rate $housing_pp $controls_pp i.year if qa_sui_allpath == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      1,868
+                                                F(19, 1867)       =      76.65
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5266
+                                                Root MSE          =     5.3239
+
+                                            (Std. err. adjusted for 1,868 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |  -.0160341   .0673352    -0.24   0.812    -.1480942    .1160261
+          pct_overcrowding_pp |   .3854973   .2005916     1.92   0.055    -.0079101    .7789048
+      pct_lack_necessities_pp |   .4321701   .2151525     2.01   0.045     .0102053    .8541349
+              long_commute_pp |  -.0046398   .0170821    -0.27   0.786    -.0381418    .0288623
+             homeownership_pp |   .0271775   .0364026     0.75   0.455    -.0442166    .0985716
+                pct_over65_pp |   .3985052   .0634154     6.28   0.000     .2741327    .5228776
+               pct_under18_pp |   .5033995   .0789516     6.38   0.000     .3485568    .6582422
+                pct_female_pp |  -.6388277    .107544    -5.94   0.000    -.8497468   -.4279086
+                 pct_black_pp |  -.3151575   .0347722    -9.06   0.000    -.3833539    -.246961
+                 pct_white_pp |  -.1824481   .0334484    -5.45   0.000    -.2480483   -.1168478
+              pct_hispanic_pp |  -.2429632   .0347855    -6.98   0.000    -.3111857   -.1747407
+                median_income |  -.0001056   .0000174    -6.06   0.000    -.0001398   -.0000714
+              unemployment_pp |  -.0175049   .1512465    -0.12   0.908    -.3141349    .2791252
+             child_poverty_pp |   .0930422   .0479879     1.94   0.053    -.0010734    .1871579
+                 pct_rural_pp |   .0184894   .0083721     2.21   0.027     .0020697    .0349091
+             hs_completion_pp |   .5478604   .0645808     8.48   0.000     .4212021    .6745186
+              some_college_pp |  -.0864047   .0271118    -3.19   0.001    -.1395773   -.0332321
+                 uninsured_pp |   .3122261   .0433158     7.21   0.000     .2272736    .3971786
+            mh_providers_1000 |   .1432611   .0827319     1.73   0.084    -.0189957    .3055178
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   5.308498   9.158859     0.58   0.562    -12.65418    23.27118
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_all_base
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("All pathway proxies sample") adjustment("Base model on same sample") ///
+>     vars($housing_pp)
+
+. 
+. reg suicide_rate $housing_pp food_insecurity_pp insufficient_sleep_pp ///
+>     loneliness_pp lack_social_support_pp $controls_pp i.year ///
+>     if qa_sui_allpath == 1, vce(cluster fipscode)
+note: 2025.year omitted because of collinearity.
+
+Linear regression                               Number of obs     =      1,868
+                                                F(23, 1867)       =      66.10
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5298
+                                                Root MSE          =     5.3116
+
+                                            (Std. err. adjusted for 1,868 clusters in fipscode)
+-----------------------------------------------------------------------------------------------
+                              |               Robust
+                 suicide_rate | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+------------------------------+----------------------------------------------------------------
+severe_housing_cost_burden_pp |   .0015243   .0672951     0.02   0.982    -.1304572    .1335057
+          pct_overcrowding_pp |   .4376558   .2040266     2.15   0.032     .0375117    .8377999
+      pct_lack_necessities_pp |   .4115042    .213264     1.93   0.054    -.0067568    .8297652
+              long_commute_pp |  -.0079936   .0180413    -0.44   0.658    -.0433769    .0273897
+             homeownership_pp |   .0296245   .0362444     0.82   0.414    -.0414593    .1007083
+           food_insecurity_pp |   .1576989   .0930959     1.69   0.090     -.024884    .3402819
+        insufficient_sleep_pp |    .038437   .0491301     0.78   0.434    -.0579187    .1347926
+                loneliness_pp |   .1907702   .0860734     2.22   0.027       .02196    .3595804
+       lack_social_support_pp |  -.1708862   .0749902    -2.28   0.023    -.3179596   -.0238128
+                pct_over65_pp |    .427125   .0647114     6.60   0.000     .3002108    .5540392
+               pct_under18_pp |   .5152625   .0785867     6.56   0.000     .3611356    .6693895
+                pct_female_pp |  -.6779751   .1096284    -6.18   0.000    -.8929821   -.4629681
+                 pct_black_pp |  -.2823212   .0384619    -7.34   0.000    -.3577542   -.2068883
+                 pct_white_pp |    -.17943   .0343117    -5.23   0.000    -.2467233   -.1121366
+              pct_hispanic_pp |  -.2371169   .0351823    -6.74   0.000    -.3061177   -.1681162
+                median_income |  -.0000894   .0000187    -4.79   0.000     -.000126   -.0000528
+              unemployment_pp |  -.0702502   .1548118    -0.45   0.650    -.3738726    .2333722
+             child_poverty_pp |   .0474555   .0519197     0.91   0.361    -.0543712    .1492823
+                 pct_rural_pp |   .0193495   .0087086     2.22   0.026     .0022699     .036429
+             hs_completion_pp |   .5400691   .0650693     8.30   0.000     .4124529    .6676853
+              some_college_pp |   -.086636   .0289602    -2.99   0.003    -.1434338   -.0298383
+                 uninsured_pp |   .2936697   .0479144     6.13   0.000     .1996984    .3876411
+            mh_providers_1000 |   .1052445   .0836663     1.26   0.209    -.0588448    .2693338
+                              |
+                         year |
+                        2025  |          0  (omitted)
+                              |
+                        _cons |   .5067816   9.607828     0.05   0.958    -18.33643    19.34999
+-----------------------------------------------------------------------------------------------
+
+. eststo qpath_sui_all_adj
+
+. qa_post_estimates, handle(`pathpost') outcome("Suicide mortality") ///
+>     analysis("All pathway proxies sample") adjustment("Plus all pathway proxies") ///
+>     vars($housing_pp food_insecurity_pp insufficient_sleep_pp loneliness_pp lack_social_support_pp)
+
+. 
+. esttab qpath_sui_all_base qpath_sui_all_adj ///
+>     using "$output/TableS0G7_Suicide_common_sample_all_proxies.rtf", replace ///
+>     keep($housing_pp food_insecurity_pp insufficient_sleep_pp loneliness_pp lack_social_support_pp) ///
+>     mtitles("Base, same sample" "+ All proxies") ///
+>     b(3) ci(3) label star(* 0.10 ** 0.05 *** 0.01) ///
+>     stats(N r2, labels("Observations" "R-squared"))
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G7_Suicide_common_sample_all_proxies.rtf not found)
+(output written to {browse  `"/Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G7_S
+> uicide_common_sample_all_proxies.rtf"'})
+
+. 
+. postclose `pathpost'
+
+. 
+. preserve
+
+.     use `pathdata', clear
+
+.     rename analysis pathway_sample
+
+.     rename adjustment model_specification
+
+.     sort outcome pathway_sample model_specification variable_name
+
+.     format beta standard_error ci_lower ci_upper %12.4f
+
+.     format p_value %9.4f
+
+.     format r_squared %9.3f
+
+.     save "$processed/common_sample_pathway_summary.dta", replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/1.processed_data/common_sample_pathway_summary.dta saved
+
+.     export excel using "$output/TableS0G_Common_sample_pathway_summary.xlsx", ///
+>         firstrow(variables) replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G_Common_sample_pathway_summa
+> ry.xlsx saved
+
+.     export delimited using "$output/TableS0G_Common_sample_pathway_summary.csv", replace
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia
+    Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G_Common_sample_pathway_summary.csv not found)
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0G_Common_sample_pathway_summa
+> ry.csv saved
+
+. restore
+
+. 
+. ********************************************************************************
+. * II-7. HOUSING CORRELATION MATRICES
+. ********************************************************************************
+. 
+. di "================ HOUSING CORRELATIONS ================"
+================ HOUSING CORRELATIONS ================
+
+. quietly correlate $housing_pp if qa_sample_mh == 1
+
+. matrix C_mh = r(C)
+
+. 
+. putexcel set "$output/TableS0H_Housing_correlation_matrices.xlsx", ///
+>     sheet("MH_sample") replace
+note: file will be replaced when the first putexcel command is issued.
+
+. putexcel A1 = "Housing correlation matrix: poor mental health analytic sample"
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0H_Housing_correlation_matrice
+> s.xlsx saved
+
+. putexcel A3 = matrix(C_mh), names
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0H_Housing_correlation_matrice
+> s.xlsx saved
+
+. 
+. quietly correlate $housing_pp if qa_sample_sui == 1
+
+. matrix C_sui = r(C)
+
+. 
+. putexcel set "$output/TableS0H_Housing_correlation_matrices.xlsx", ///
+>     sheet("Suicide_sample") modify
+
+. putexcel A1 = "Housing correlation matrix: suicide analytic sample"
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0H_Housing_correlation_matrice
+> s.xlsx saved
+
+. putexcel A3 = matrix(C_sui), names
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0H_Housing_correlation_matrice
+> s.xlsx saved
+
+. 
+. * Display pairwise correlations with P values in the log as an additional check.
+. pwcorr $housing_pp if qa_sample_mh == 1, sig obs
+
+             | sev~n_pp pct~g_pp pct_la~p long_~pp homeo~pp
+-------------+---------------------------------------------
+severe_~n_pp |   1.0000 
+             |
+             |     8843
+             |
+pct_overcr~p |   0.1521   1.0000 
+             |   0.0000
+             |     8843     8843
+             |
+pct_lack_n~p |  -0.0400   0.5292   1.0000 
+             |   0.0002   0.0000
+             |     8843     8843     8843
+             |
+long_comm~pp |  -0.0227  -0.0940  -0.1484   1.0000 
+             |   0.0326   0.0000   0.0000
+             |     8843     8843     8843     8843
+             |
+homeowner~pp |  -0.5742  -0.2823  -0.0569   0.3356   1.0000 
+             |   0.0000   0.0000   0.0000   0.0000
+             |     8843     8843     8843     8843     8843
+             |
+
+. pwcorr $housing_pp if qa_sample_sui == 1, sig obs
+
+             | sev~n_pp pct~g_pp pct_la~p long_~pp homeo~pp
+-------------+---------------------------------------------
+severe_~n_pp |   1.0000 
+             |
+             |     7249
+             |
+pct_overcr~p |   0.1608   1.0000 
+             |   0.0000
+             |     7249     7249
+             |
+pct_lack_n~p |  -0.0306   0.5850   1.0000 
+             |   0.0092   0.0000
+             |     7249     7249     7249
+             |
+long_comm~pp |  -0.0761  -0.1015  -0.1556   1.0000 
+             |   0.0000   0.0000   0.0000
+             |     7249     7249     7249     7249
+             |
+homeowner~pp |  -0.6228  -0.2768  -0.0508   0.3760   1.0000 
+             |   0.0000   0.0000   0.0000   0.0000
+             |     7249     7249     7249     7249     7249
+             |
+
+. 
+. ********************************************************************************
+. * II-8. MANUAL VIF DIAGNOSTICS FOR FULL PREDICTOR SET
+. ********************************************************************************
+. 
+. /*
+> VIF is computed for each continuous predictor by regressing it on all other
+> continuous predictors plus release-year indicators. VIF does not depend on the
+> outcome or on clustered standard errors, but it can differ across analytic samples.
+> */
+. 
+. di "================ VIF DIAGNOSTICS ================"
+================ VIF DIAGNOSTICS ================
+
+. local vif_predictors ///
+>     $housing_pp $demographic_covars_pp ///
+>     median_income unemployment_pp child_poverty_pp pct_rural_pp ///
+>     hs_completion_pp some_college_pp ///
+>     $healthcare_covars
+
+. 
+. tempname vifpost
+
+. tempfile vifdata
+
+. postfile `vifpost' str30 analytic_sample str40 variable_name str80 variable_label ///
+>     double vif tolerance auxiliary_r_squared long observations ///
+>     using `vifdata', replace
+(file /var/folders/w6/b__yj12d4sz89kvtbjc4m61c0000gn/T//S_43912.00000i not found)
+
+. 
+. foreach sample_name in MH Suicide {
+  2.     if "`sample_name'" == "MH" local sample_if "qa_sample_mh == 1"
+  3.     if "`sample_name'" == "Suicide" local sample_if "qa_sample_sui == 1"
+  4. 
+.     foreach x of local vif_predictors {
+  5.         local others : list vif_predictors - x
+  6.         quietly regress `x' `others' i.year if `sample_if'
+  7.         local aux_r2 = e(r2)
+  8.         local this_n = e(N)
+  9.         local this_vif = .
+ 10.         local this_tol = .
+ 11.         if (`aux_r2' < 1) {
+ 12.             local this_vif = 1 / (1 - `aux_r2')
+ 13.             local this_tol = 1 / `this_vif'
+ 14.         }
+ 15.         local vlabel : variable label `x'
+ 16.         if `"`vlabel'"' == "" local vlabel "`x'"
+ 17. 
+.         post `vifpost' ("`sample_name'") ("`x'") (`"`vlabel'"') ///
+>             (`this_vif') (`this_tol') (`aux_r2') (`this_n')
+ 18.     }
+ 19. }
+
+. postclose `vifpost'
+
+. 
+. preserve
+
+.     use `vifdata', clear
+
+.     gsort analytic_sample -vif
+
+.     format vif tolerance auxiliary_r_squared %9.3f
+
+.     save "$processed/vif_diagnostics.dta", replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/1.processed_data/vif_diagnostics.dta saved
+
+.     export excel using "$output/TableS0I_VIF_diagnostics.xlsx", ///
+>         firstrow(variables) replace
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0I_VIF_diagnostics.xlsx saved
+
+.     export delimited using "$output/TableS0I_VIF_diagnostics.csv", replace
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0I_VIF_diagnostics.csv not
+    found)
+file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/TableS0I_VIF_diagnostics.csv saved
+
+. 
+.     bysort analytic_sample: summarize vif, detail
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-> analytic_sample = MH
+
+                             vif
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     1.472967       1.472967
+ 5%     1.472967        1.68283
+10%      1.68283       1.837051       Obs                  19
+25%     1.980679        1.88965       Sum of wgt.          19
+
+50%     3.052348                      Mean           3.742013
+                        Largest       Std. dev.      2.457506
+75%     4.742053       5.916156
+90%     6.476223       5.986896       Variance       6.039334
+95%     11.65788       6.476223       Skewness       1.879407
+99%     11.65788       11.65788       Kurtosis       6.636008
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-> analytic_sample = Suicide
+
+                             vif
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     1.545317       1.545317
+ 5%     1.545317       1.712376
+10%     1.712376       1.915291       Obs                  19
+25%     2.089971       1.989047       Sum of wgt.          19
+
+50%     3.454741                      Mean           3.975246
+                        Largest       Std. dev.      2.414577
+75%     5.183078       5.974223
+90%     6.152969       6.085241       Variance       5.830182
+95%     11.71945       6.152969       Skewness       1.759183
+99%     11.71945       11.71945       Kurtosis       6.525784
+
+
+. restore
+
+. 
+. ********************************************************************************
+. * II-9. COMPLETION SUMMARY AND FREEZE MANIFEST
+. ********************************************************************************
+. 
+. di "=================================================================="
+==================================================================
+
+. di as result "Reviewer-driven QA analyses completed."
+Reviewer-driven QA analyses completed.
+
+. di as result "Freeze-candidate analysis data were reloaded and were not overwritten in Phase II."
+Freeze-candidate analysis data were reloaded and were not overwritten in Phase II.
+
+. di as result "Review outputs in: $output"
+Review outputs in: /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25
+
+. di "=================================================================="
+==================================================================
+
+. 
+. ********************************************************************************
+. * II-10. FINAL CODE-FREEZE CHECKS AND MANIFEST
+. ********************************************************************************
+. 
+. quietly count
+
+. local final_check_total = r(N)
+
+. assert `final_check_total' == $EXPECTED_TOTAL
+
+. quietly count if qa_sample_mh == 1
+
+. local final_check_mh = r(N)
+
+. assert `final_check_mh' == $EXPECTED_MH_FINAL
+
+. quietly count if qa_sample_sui == 1
+
+. local final_check_sui = r(N)
+
+. assert `final_check_sui' == $EXPECTED_SUI_FINAL
+
+. 
+. assert scalar(freeze_n_mh) == $EXPECTED_MH_FINAL
+
+. assert scalar(freeze_n_sui) == $EXPECTED_SUI_FINAL
+
+. 
+. file open freeze_manifest using "$output/ANALYSIS_FREEZE_MANIFEST.txt", write text replace
+(file /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/ANALYSIS_FREEZE_MANIFEST.txt not
+    found)
+
+. file write freeze_manifest "RWJF County Housing and Mental Health Analysis" _n
+
+. file write freeze_manifest "Freeze candidate version: $freeze_tag" _n
+
+. file write freeze_manifest "Generated by merged main + reviewer-QA do-file" _n _n
+
+. file write freeze_manifest "ELIGIBLE COUNTY-RELEASE RECORDS" _n
+
+. file write freeze_manifest "Total after geography restriction: " %10.0f ($EXPECTED_TOTAL) _n
+
+. file write freeze_manifest "Poor mental health outcome observed: " %10.0f ($EXPECTED_MH_OBSERVED) _n
+
+. file write freeze_manifest "Poor mental health final sample: " %10.0f ($EXPECTED_MH_FINAL) _n
+
+. file write freeze_manifest "Suicide mortality outcome observed: " %10.0f ($EXPECTED_SUI_OBSERVED) _n
+
+. file write freeze_manifest "Suicide mortality final sample: " %10.0f ($EXPECTED_SUI_FINAL) _n _n
+
+. file write freeze_manifest "MUTUALLY ADJUSTED KEY COEFFICIENTS (per 1 percentage point)" _n
+
+. file write freeze_manifest "MH: severe housing cost burden = " %9.6f (scalar(freeze_b_mh_cost)) _n
+
+. file write freeze_manifest "MH: long commuting = " %9.6f (scalar(freeze_b_mh_long)) _n
+
+. file write freeze_manifest "MH: homeownership = " %9.6f (scalar(freeze_b_mh_own)) _n
+
+. file write freeze_manifest "Suicide: overcrowding = " %9.6f (scalar(freeze_b_sui_crowd)) _n
+
+. file write freeze_manifest "Suicide: lack kitchen/plumbing facilities = " %9.6f (scalar(freeze_b_sui_lack)) _n _n
+
+. file write freeze_manifest "STATUS: CODE FREEZE CHECKS PASSED" _n
+
+. file close freeze_manifest
+
+. 
+. di "=================================================================="
+==================================================================
+
+. di as result "CODE FREEZE CHECKS PASSED"
+CODE FREEZE CHECKS PASSED
+
+. di as result "Freeze manifest: $output/ANALYSIS_FREEZE_MANIFEST.txt"
+Freeze manifest: /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/ANALYSIS_FREEZE_MANIFEST
+> .txt
+
+. di as result "Main log: $output/01_main_analysis.log"
+Main log: /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/01_main_analysis.log
+
+. di as result "QA log: $output/02_reviewer_QA.log"
+QA log: /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/02_reviewer_QA.log
+
+. di "=================================================================="
+==================================================================
+
+. 
+. log close
+      name:  <unnamed>
+       log:  /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/FREEZE_CANDIDATE_2026_08_25/02_reviewer_QA.log
+  log type:  text
+ closed on:  25 Aug 2026, 21:23:14
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

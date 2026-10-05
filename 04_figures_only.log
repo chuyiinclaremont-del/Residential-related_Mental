@@ -1,0 +1,128 @@
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/chuyi/Library/CloudStorage/GoogleDrive-chuyiinclaremont@gmail.com/.shortcut-targets-by-id/12-9WcpPipBnCJfhgXA2Agu0tixW37IlJ/Academia Related/SchullerProject/Data_Results/3.output/ANALYSIS_FREEZE_2026_08_25/figures_only/04_figures_only.
+> log
+  log type:  text
+ opened on:  25 Aug 2026, 21:46:17
+
+. 
+. di as text "=============================================================="
+==============================================================
+
+. di as text " FIGURES-ONLY DO-FILE STARTED"
+ FIGURES-ONLY DO-FILE STARTED
+
+. di as text "=============================================================="
+==============================================================
+
+. 
+. *==========================================================================*
+. * 1. LOAD FROZEN OR ANALYSIS-READY DATA
+. *==========================================================================*
+. cap confirm file "$processed_data/rwjf_2023_2025_analysis_ready_FREEZE_2026_08_25.dta"
+
+. if !_rc {
+.     use "$processed/rwjf_2023_2025_analysis_ready_FREEZE_2026_08_25.dta", clear
+.     di as result "Loaded frozen dataset: rwjf_2023_2025_analysis_ready_FREEZE_2026_08_25.dta"
+. }
+
+. else {
+.     cap confirm file "$processed/rwjf_2023_2025_analysis_ready.dta"
+.     if !_rc {
+.         use "$processed/rwjf_2023_2025_analysis_ready.dta", clear
+.         di as result "Loaded analysis-ready dataset: rwjf_2023_2025_analysis_ready.dta"
+Loaded analysis-ready dataset: rwjf_2023_2025_analysis_ready.dta
+.     }
+.     else {
+.         di as error "No frozen or analysis-ready dataset found in $processed"
+.         exit 601
+.     }
+. }
+
+. 
+. *==========================================================================*
+. * 2. REQUIRED PACKAGES
+. *==========================================================================*
+. capture which coefplot
+
+. if _rc {
+.     di as text "coefplot not found; attempting SSC install..."
+.     capture ssc install coefplot, replace
+. }
+
+. 
+. capture which coefplot
+
+. if _rc {
+.     di as error "coefplot is required but unavailable."
+.     exit 199
+. }
+
+. 
+. *==========================================================================*
+. * 3. GLOBALS USED FOR FROZEN MODELS
+. *==========================================================================*
+. global housing_pp ///
+>     severe_housing_cost_burden_pp ///
+>     pct_overcrowding_pp ///
+>     pct_lack_necessities_pp ///
+>     long_commute_pp ///
+>     homeownership_pp
+
+. 
+. global controls_pp ///
+>     pct_over65_pp pct_under18_pp pct_female_pp ///
+>     pct_black_pp pct_white_pp pct_hispanic_pp ///
+>     median_income unemployment_pp child_poverty_pp pct_rural_pp ///
+>     hs_completion_pp some_college_pp uninsured_pp mh_providers_1000
+
+. 
+. *==========================================================================*
+. * 4. REBUILD FROZEN ANALYTIC SAMPLES (presentation-only consistency check)
+. *==========================================================================*
+. cap drop nmiss_housing nmiss_demographic nmiss_socioeconomic nmiss_healthcare
+
+. cap drop sample_mh sample_suicide sample_food sample_sleep sample_loneliness sample_support
+
+. 
+. egen nmiss_housing = rowmiss($housing_pp)
+
+. egen nmiss_demographic = rowmiss( ///
+>     pct_over65_pp pct_under18_pp pct_female_pp ///
+>     pct_black_pp pct_white_pp pct_hispanic_pp)
+variable nmiss_demographic already defined
+r(110);
+
+end of do-file
+
+r(110);
+
+. do "/Users/chuyi/Downloads/04_figures_only_v2.do"
+
+. /****************************************************************************************
+> RWJF / County Health Rankings Housing and Mental Health Project
+> FIGURES-ONLY DO-FILE — FROZEN ANALYSIS
+> Version: 2026-08-25-v2
+> 
+> Purpose
+>   Re-create publication-quality figures from the frozen analysis-ready dataset.
+>   This file does not clean data, redefine samples, save data, or change any model.
+> 
+> Important
+>   - The frozen sample flags already stored in the analysis file are used directly.
+>   - Expected samples: 8,843 poor mental health observations and 7,249 suicide
+>     mortality observations.
+>   - Figure formatting may be changed without reopening the statistical code freeze.
+> ****************************************************************************************/
+. 
+. version 18
+
+. clear all
+
+. set more off
+
+. set varabbrev off
+
+. set linesize 255
+
+. capture log close
